@@ -1,0 +1,86 @@
+services:
+  - type: web
+    name: planificapp-api-dev
+    runtime: python
+    plan: free
+    branch: develop
+    buildCommand: ./build.sh
+    startCommand: gunicorn config.wsgi:application
+    healthCheckPath: /api/health/
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12
+      - key: ENVIRONMENT
+        value: dev
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: planificapp-api-dev.onrender.com
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://planificapp-web-dev.onrender.com
+      - key: CSRF_TRUSTED_ORIGINS
+        value: https://planificapp-web-dev.onrender.com
+      - key: SECRET_KEY
+        generateValue: true
+      # Sin DATABASE_URL este servicio usa SQLite en disco efímero: la base se
+      # pierde en cada deploy. Suficiente mientras dev/qa se trabajen en local.
+      # Para apuntarlo a Supabase, cargar aquí la cadena del session pooler.
+      - key: DATABASE_URL
+        sync: false
+
+  - type: web
+    name: planificapp-api-qa
+    runtime: python
+    plan: free
+    branch: qa
+    buildCommand: ./build.sh
+    startCommand: gunicorn config.wsgi:application
+    healthCheckPath: /api/health/
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12
+      - key: ENVIRONMENT
+        value: qa
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: planificapp-api-qa.onrender.com
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://planificapp-web-qa.onrender.com
+      - key: CSRF_TRUSTED_ORIGINS
+        value: https://planificapp-web-qa.onrender.com
+      - key: SECRET_KEY
+        generateValue: true
+      # Sin DATABASE_URL este servicio usa SQLite en disco efímero: la base se
+      # pierde en cada deploy. Suficiente mientras dev/qa se trabajen en local.
+      # Para apuntarlo a Supabase, cargar aquí la cadena del session pooler.
+      - key: DATABASE_URL
+        sync: false
+
+  - type: web
+    name: planificapp-api-prod
+    runtime: python
+    plan: free
+    branch: main
+    buildCommand: ./build.sh
+    startCommand: gunicorn config.wsgi:application
+    healthCheckPath: /api/health/
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12
+      - key: ENVIRONMENT
+        value: prod
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: planificapp-api-prod.onrender.com
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://planificapp-web-prod.onrender.com
+      - key: CSRF_TRUSTED_ORIGINS
+        value: https://planificapp-web-prod.onrender.com
+      - key: SECRET_KEY
+        generateValue: true
+      # Obligatoria: cadena del session pooler de Supabase (puerto 5432).
+      # Se carga a mano en el dashboard, nunca en el repositorio.
+      - key: DATABASE_URL
+        sync: false
