@@ -1,0 +1,7 @@
+Django==6.1.1
+djangorestframework
+django-cors-headers
+django-environ
+dj-database-url
+psycopg[binary]
+gunicorn
