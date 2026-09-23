@@ -4,7 +4,8 @@ from django.http import JsonResponse
 from rest_framework.generics import ListCreateAPIView
 from .models import Events, Subtasks
 from .serializers import EventSerializer, SubtaskSerializer
-
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+from rest_framework.generics import ListCreateAPIView
 
 def test(request):
     return JsonResponse({
@@ -54,6 +55,18 @@ class EventListCreateView(ListCreateAPIView):
 
 class EventSubtaskListCreateView(ListCreateAPIView):
     serializer_class = SubtaskSerializer
+
+    @extend_schema(
+        summary="List or create subtasks for a specific event",
+        parameters=[
+            OpenApiParameter(
+                name="eid", 
+                type=int, 
+                location=OpenApiParameter.PATH, 
+                description="ID of the parent event"
+            )
+        ]
+    )
 
     #GET: Only return subtasks belonging to the event id in URL
     def get_queryset(self):
