@@ -1,15 +1,15 @@
 from rest_framework import serializers
-from .models import Tasks, Subtasks
+from .models import Events, Subtasks
 
 
 # Event model serializer for parsing requests
 class EventSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Tasks
+        model = Events
         fields = '__all__' 
 
 class SubtaskSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Subtask
+        model = Subtasks
         fields = '__all__' 
-        read_only_fields = ['event']  # <--- ID will be assigned from URL parameter
+        read_only_fields = ['eid']  # Event ID assigned from URL parameter

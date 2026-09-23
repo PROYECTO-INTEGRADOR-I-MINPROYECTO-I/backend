@@ -1,4 +1,4 @@
-from django.db import models
+﻿from django.db import models
 
 
 class AuthGroup(models.Model):
@@ -125,9 +125,24 @@ class DjangoSession(models.Model):
         db_table = 'django_session'
 
 
+class Events(models.Model):
+    eid = models.AutoField(primary_key=True)
+    user = models.ForeignKey('Users', models.DB_CASCADE)
+    name = models.CharField(max_length=150)
+    description = models.TextField(blank=True, null=True)
+    due_date = models.DateTimeField()
+    status = models.TextField()  # This field type is a guess.
+    progress_percentage = models.DecimalField(max_digits=5, decimal_places=2)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'events'
+
+
 class Subtasks(models.Model):
     subtask_id = models.AutoField(primary_key=True)
-    task = models.ForeignKey('Tasks', models.DB_CASCADE)
+    eid = models.ForeignKey(Events, models.DB_CASCADE, db_column='eid')
     title = models.CharField(max_length=150)
     description = models.TextField(blank=True, null=True)
     category = models.TextField()  # This field type is a guess.
@@ -139,21 +154,6 @@ class Subtasks(models.Model):
     class Meta:
         managed = False
         db_table = 'subtasks'
-
-
-class Tasks(models.Model):
-    task_id = models.AutoField(primary_key=True)
-    user = models.ForeignKey('Users', models.DB_CASCADE)
-    name = models.CharField(max_length=150)
-    description = models.TextField(blank=True, null=True)
-    task_date = models.DateTimeField()
-    status = models.TextField()  # This field type is a guess.
-    progress_percentage = models.DecimalField(max_digits=5, decimal_places=2)
-    created_at = models.DateTimeField()
-
-    class Meta:
-        managed = False
-        db_table = 'tasks'
 
 
 class User(models.Model):

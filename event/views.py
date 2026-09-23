@@ -2,8 +2,8 @@ from django.conf import settings
 from django.db import connection
 from django.http import JsonResponse
 from rest_framework.generics import ListCreateAPIView
-from .models import Tasks
-from .serializers import EventSerializer
+from .models import Events, Subtasks
+from .serializers import EventSerializer, SubtaskSerializer
 
 
 def test(request):
@@ -47,6 +47,20 @@ def health(request):
     })
 
 
+# Generic view for Event view
 class EventListCreateView(ListCreateAPIView):
-    queryset = Tasks.objects.all()
+    queryset = Events.objects.all()
     serializer_class = EventSerializer
+
+class EventSubtaskListCreateView(ListCreateAPIView):
+    serializer_class = SubtaskSerializer
+
+    #GET: Only return subtasks belonging to the event id in URL
+    def get_queryset(self):
+        event_id = self.kwargs['eid']
+        return Subtask.objects.filter(eid=eid)
+
+    # 2- POST: Attach the parent Event object automatically when saving
+    def perform_create(self, serializer):
+        event = get_object_or_404(Events, pk=self.kwargs['eid'])
+        serializer.save(eid=event)
