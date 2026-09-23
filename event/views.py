@@ -1,6 +1,9 @@
 from django.conf import settings
 from django.db import connection
 from django.http import JsonResponse
+from rest_framework.generics import ListCreateAPIView
+from .models import Tasks
+from .serializers import EventSerializer
 
 
 def test(request):
@@ -42,3 +45,8 @@ def health(request):
         "environment": settings.ENVIRONMENT,
         "database": "ok",
     })
+
+
+class EventListCreateView(ListCreateAPIView):
+    queryset = Tasks.objects.all()
+    serializer_class = EventSerializer
