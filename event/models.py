@@ -70,15 +70,6 @@ class AuthUserUserPermissions(models.Model):
         unique_together = (('user', 'permission'),)
 
 
-class DailyCapacity(models.Model):
-    daily_capacity_id = models.AutoField(primary_key=True)
-    user = models.ForeignKey('Users', models.DB_CASCADE)
-    max_daily_hours = models.DecimalField(max_digits=4, decimal_places=2)
-
-    class Meta:
-        managed = False
-        db_table = 'daily_capacity'
-
 
 class DjangoAdminLog(models.Model):
     action_time = models.DateTimeField()
@@ -142,7 +133,7 @@ class Events(models.Model):
 
 class Subtasks(models.Model):
     subtask_id = models.AutoField(primary_key=True)
-    eid = models.ForeignKey(Events, models.DB_CASCADE, db_column='eid')
+    eid = models.ForeignKey('Events', models.DB_CASCADE, db_column='eid')
     title = models.CharField(max_length=150)
     description = models.TextField(blank=True, null=True)
     category = models.TextField()
@@ -156,25 +147,13 @@ class Subtasks(models.Model):
         db_table = 'subtasks'
 
 
-class User(models.Model):
-    user_id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=100)
-    email = models.CharField(unique=True, max_length=150)
-    password_hash = models.CharField(max_length=255)
-    max_daily_hours = models.DecimalField(max_digits=4, decimal_places=2)
-    created_at = models.DateTimeField()
-
-    class Meta:
-        managed = False
-        db_table = 'user'
-
-
 class Users(models.Model):
     user_id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100)
     email = models.CharField(unique=True, max_length=150)
     password_hash = models.CharField(max_length=255)
-    created_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    max_daily_hours = models.SmallIntegerField(blank=True, null=True)
 
     class Meta:
         managed = False

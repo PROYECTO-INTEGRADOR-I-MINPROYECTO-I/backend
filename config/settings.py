@@ -238,3 +238,24 @@ if not DEBUG:
         SECURE_HSTS_SECONDS = 31536000
         SECURE_HSTS_INCLUDE_SUBDOMAINS = True
         SECURE_HSTS_PRELOAD = True
+
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Miniproyecto Event Management API',
+    'DESCRIPTION': '''
+    Welcome to the Event Management API. 
+    
+    ### Key Features
+    - **Events:** Manage top-level project events and deadlines.
+    - **Subtasks:** Track individual action items under each event.
+    - **Enums:** Custom database enums enforce strict validation for statuses and categories.
+    ''',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    # Optional styling settings:
+    'SWAGGER_UI_SETTINGS': {
+        'deepLinking': True,
+        'defaultModelsExpandDepth': 2,
+        'defaultModelExpandDepth': 2,
+    },
+}
