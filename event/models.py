@@ -130,10 +130,10 @@ class Events(models.Model):
     user = models.ForeignKey('Users', models.DB_CASCADE)
     name = models.CharField(max_length=150)
     description = models.TextField(blank=True, null=True)
-    due_date = models.DateTimeField()
-    status = models.TextField()  # This field type is a guess.
+    due_date = models.DateField()
+    status = models.TextField()  
     progress_percentage = models.DecimalField(max_digits=5, decimal_places=2)
-    created_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         managed = False
@@ -145,11 +145,11 @@ class Subtasks(models.Model):
     eid = models.ForeignKey(Events, models.DB_CASCADE, db_column='eid')
     title = models.CharField(max_length=150)
     description = models.TextField(blank=True, null=True)
-    category = models.TextField()  # This field type is a guess.
+    category = models.TextField()
     estimated_hours = models.DecimalField(max_digits=4, decimal_places=2)
     scheduled_date = models.DateField()
-    status = models.TextField()  # This field type is a guess.
-    priority = models.TextField()  # This field type is a guess.
+    status = models.TextField() 
+    priority = models.TextField() 
 
     class Meta:
         managed = False
