@@ -169,7 +169,9 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Users
-        fields = '__all__'
+        # No incluye password_hash: este serializer es el que expone
+        # GET/PATCH /api/yo/, y nunca debe devolver el hash en la respuesta.
+        fields = ['user_id', 'name', 'email', 'max_daily_hours']
 
 
 class UserRegisterSerializer(serializers.ModelSerializer):
