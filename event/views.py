@@ -92,7 +92,6 @@ class OrganizerMixin:
         return context
 
 
-# Generic view for Event view
 @extend_schema_view(
     get=extend_schema(
         summary="List all events",
@@ -103,6 +102,21 @@ class OrganizerMixin:
         summary="Create an event",
         description="Creates a new event attached to the current organizer.",
         tags=["Eventos"],
+        examples=[
+                OpenApiExample(
+                    "Valid Subtask Payload",
+                    summary="Example of a valid event request",
+                    value={
+                        "name": "Boda Natalia & Julio",
+                        "description": "Planeación de boda completa.",
+                        "due_date": "2026-09-25",
+                        "event_type": 1,
+                        "place": "Salón de Evento Cañasgoardas",
+                        "client_contact": "123-456-8790"
+                    },
+                    request_only=True,
+                )
+            ],
     ),
 )
 class EventListCreateView(OrganizerMixin, ListCreateAPIView):
@@ -204,10 +218,10 @@ class UserRegisterView(CreateAPIView):
     post=extend_schema(
         summary="Create a new subtask",
         description="""
-        Creates a new subtask associated with a specific event.
+Creates a new subtask associated with a specific event.
 
-        * **Note:** the response includes a `warnings` list (e.g. when the
-          subtask's target date falls after the event's due date).
+* **Note:** the response includes a `warnings` list (e.g. when the
+subtask's target date falls after the event's due date).
         """,
         parameters=[
             OpenApiParameter(
