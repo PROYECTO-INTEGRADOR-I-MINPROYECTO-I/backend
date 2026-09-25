@@ -243,12 +243,12 @@ if not DEBUG:
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Miniproyecto Event Management API',
     'DESCRIPTION': '''
-    Welcome to the Event Management API. 
+Welcome to the Event Management API. 
     
-    ### Key Features
-    - **Events:** Manage top-level project events and deadlines.
-    - **Subtasks:** Track individual action items under each event.
-    - **Enums:** Custom database enums enforce strict validation for statuses and categories.
+### Key Features
+- **Events:** Manage top-level project events, with deadlines, priority and estimated progress.
+- **Subtasks:** Track individual action items under each event.
+- **Enums:** Custom database enums enforce strict validation for statuses and categories.
     ''',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,

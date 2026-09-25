@@ -3,7 +3,7 @@ from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 import datetime
-
+from django.contrib.auth.hashers import make_password
 from .models import Events, Subtasks, Users, EventType, Category
 from .exceptions import Conflict
 
@@ -175,7 +175,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class UserRegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(
+    password_hash = serializers.CharField(
         write_only=True,          # <--- NEVER returned in JSON response!
         required=True,
         style={'input_type': 'password'}
@@ -183,11 +183,11 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Users
-        fields = '__all__'
+        fields = ['user_id', 'email', 'name', 'max_daily_hours', 'password_hash']
 
     def create(self, validated_data):
-        # Must use create_user() so Django hashes the password properly!
-        user = Users.objects.create_user(
+        validated_data['password_hash'] = make_password(validated_data['password_hash'])
+        user = Users.objects.create(
             name=validated_data['name'],
             email=validated_data.get('email', ''),
             password_hash=validated_data['password_hash'],

@@ -185,11 +185,6 @@ class UserRegisterView(CreateAPIView):
     queryset = Users.objects.all()
     serializer_class = UserRegisterSerializer
     permission_classes = [AllowAny]  # Allow any user to register
-    # FIXME(jdcm): UserRegisterSerializer.create() llama a Users.objects.create_user(),
-    # pero Users es un modelo plano sin manager personalizado (no hereda de
-    # AbstractBaseUser/BaseUserManager) -> este endpoint lanza AttributeError en
-    # cuanto se le haga un POST. Pendiente de que Juan Diego lo arregle (no es parte
-    # de este ajuste de organizador).
 
 
 @extend_schema_view(
