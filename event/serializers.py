@@ -61,4 +61,26 @@ class UserSerializer(serializers.ModelSerializer):
     )
     class Meta:
         model = Users
-        fields = '__all__' 
+        fields = ['user_id', 'name', 'email', 'max_daily_hours']
+
+
+class UserRegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(
+        write_only=True,          # <--- NEVER returned in JSON response!
+        required=True,
+        style={'input_type': 'password'}
+    )
+
+    class Meta:
+        model = Users
+        fields = '__all__'
+
+    def create(self, validated_data):
+        # Must use create_user() so Django hashes the password properly!
+        user = Users.objects.create_user(
+            name=validated_data['name'],
+            email=validated_data.get('email', ''),
+            password_hash=validated_data['password_hash'],
+            max_daily_hours=validated_data['max_daily_hours'],
+        )
+        return user

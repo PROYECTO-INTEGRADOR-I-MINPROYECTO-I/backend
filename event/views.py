@@ -3,7 +3,7 @@ from django.db import connection
 from django.http import JsonResponse
 from rest_framework.generics import ListCreateAPIView
 from .models import Events, Subtasks, Users
-from .serializers import EventSerializer, SubtaskSerializer, UserSerializer
+from .serializers import EventSerializer, SubtaskSerializer, UserSerializer, UserRegisterSerializer
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework.generics import ListCreateAPIView
 from django.shortcuts import get_object_or_404
@@ -11,6 +11,8 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExampl
 from drf_spectacular.types import OpenApiTypes
 from rest_framework import status
 from drf_spectacular.utils import extend_schema, extend_schema_view
+from rest_framework.generics import RetrieveUpdateAPIView, CreateAPIView
+from rest_framework.permissions import IsAuthenticated, AllowAny
 
 def test(request):
     return JsonResponse({
@@ -82,10 +84,27 @@ class EventListCreateView(ListCreateAPIView):
         tags = ["Usuarios"]
     ),
 )
-class UserListCreateView(ListCreateAPIView):
-    queryset = Users.objects.all()
+class CurrentUserView(RetrieveUpdateAPIView):
     serializer_class = UserSerializer
+    permission_classes = [AllowAny] # Just for demo
 
+
+    def get_object(self):
+        demo_user, created = Users.objects.get_or_create(
+            email='demo@example.com',
+            defaults={
+                'name': 'Demo User',
+                'password_hash': 'demo_hashed_secret',  # Placeholder hash for test
+                'max_daily_hours': 8,
+            }
+        )
+        return demo_user
+
+
+class UserRegisterView(CreateAPIView):
+    queryset = Users.objects.all()
+    serializer_class = UserRegisterSerializer
+    permission_classes = [AllowAny] # Allow any user to register
 
 
 class EventSubtaskListCreateView(ListCreateAPIView):
