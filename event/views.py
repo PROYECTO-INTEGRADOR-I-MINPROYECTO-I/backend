@@ -3,9 +3,10 @@ from django.db import IntegrityError, connection, transaction
 from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
 from rest_framework import status
-from rest_framework.generics import ListCreateAPIView
+from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.response import Response
 
 from drf_spectacular.utils import (
@@ -109,6 +110,39 @@ class EventListCreateView(OrganizerMixin, ListCreateAPIView):
 
 @extend_schema_view(
     get=extend_schema(
+        summary="Retrieve an event",
+        description="Returns a single event owned by the current organizer.",
+        tags=["Eventos"],
+    ),
+    patch=extend_schema(
+        summary="Partially update an event",
+        description="Updates one or more fields of an event owned by the current organizer.",
+        tags=["Eventos"],
+        responses={
+            200: EventSerializer,
+            400: OpenApiResponse(description="Validation error (e.g. empty name or past due date)"),
+            404: OpenApiResponse(description="Event not found for the current organizer"),
+        },
+    ),
+    delete=extend_schema(
+        summary="Delete an event",
+        description="Deletes an event owned by the current organizer. Its subtasks are deleted in cascade.",
+        tags=["Eventos"],
+        responses={204: None, 404: OpenApiResponse(description="Event not found for the current organizer")},
+    ),
+)
+class EventDetailView(OrganizerMixin, RetrieveUpdateDestroyAPIView):
+    serializer_class = EventSerializer
+    lookup_field = "eid"
+    lookup_url_kwarg = "eid"
+    http_method_names = ["get", "patch", "delete", "head", "options"]
+
+    def get_queryset(self):
+        return Events.objects.filter(user=self.get_organizer())
+
+
+@extend_schema_view(
+    get=extend_schema(
         summary="List all users",
         description="Returns list of all registered users.",
         tags=["Usuarios"],
@@ -206,6 +240,54 @@ class EventSubtaskListCreateView(OrganizerMixin, ListCreateAPIView):
         if warnings:
             response.data["warnings"] = warnings
         return response
+
+
+@extend_schema_view(
+    get=extend_schema(
+        summary="Retrieve a subtask",
+        description="Returns a single subtask that belongs to an event owned by the current organizer.",
+        tags=["Subtasks"],
+    ),
+    patch=extend_schema(
+        summary="Partially update a subtask",
+        description="""
+        Updates one or more fields of a subtask. `eid` is read-only: a
+        subtask cannot be moved to another event.
+
+        Setting `status` to `"done"` stamps `executed_at` with the current
+        time; moving it away from `"done"` clears `executed_at`.
+        """,
+        tags=["Subtasks"],
+        responses={
+            200: SubtaskSerializer,
+            400: OpenApiResponse(description="Validation error (e.g. empty title or invalid hours)"),
+            404: OpenApiResponse(description="Subtask not found for the current organizer"),
+        },
+    ),
+    delete=extend_schema(
+        summary="Delete a subtask",
+        description="Deletes a subtask owned (through its event) by the current organizer.",
+        tags=["Subtasks"],
+        responses={204: None, 404: OpenApiResponse(description="Subtask not found for the current organizer")},
+    ),
+)
+class SubtaskDetailView(OrganizerMixin, RetrieveUpdateDestroyAPIView):
+    serializer_class = SubtaskSerializer
+    lookup_field = "subtask_id"
+    lookup_url_kwarg = "subtask_id"
+    http_method_names = ["get", "patch", "delete", "head", "options"]
+
+    def get_queryset(self):
+        return Subtasks.objects.filter(eid__user=self.get_organizer())
+
+    def perform_update(self, serializer):
+        previous_status = serializer.instance.status
+        instance = serializer.save()
+        # Only on a real transition, so a retried {"status": "done"} keeps the
+        # original completion time.
+        if instance.status != previous_status and "done" in (instance.status, previous_status):
+            instance.executed_at = timezone.now() if instance.status == "done" else None
+            instance.save(update_fields=["executed_at"])
 
 
 @extend_schema_view(
