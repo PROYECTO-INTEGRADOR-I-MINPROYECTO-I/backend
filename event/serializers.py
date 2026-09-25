@@ -27,11 +27,26 @@ class EventSerializer(serializers.ModelSerializer):
     name = serializers.CharField(
         required=True,
         allow_blank=False,
-        error_messages={"blank": "Escribe el nombre del evento."},
+        error_messages={
+            "blank": "Escribe el nombre del evento.",
+            "required": "Escribe el nombre del evento.",
+        },
     )
-    due_date = serializers.DateTimeField(validators=[validate_future_date])
+    due_date = serializers.DateTimeField(
+        validators=[validate_future_date],
+        error_messages={
+            "required": "Elige la fecha del evento.",
+            "invalid": "La fecha del evento no es válida.",
+        },
+    )
     event_type = serializers.PrimaryKeyRelatedField(
-        queryset=EventType.objects.all(), allow_null=True, required=False
+        queryset=EventType.objects.all(),
+        allow_null=True,
+        required=False,
+        error_messages={
+            "does_not_exist": "El tipo de evento no existe.",
+            "incorrect_type": "El tipo de evento no es válido.",
+        },
     )
     user = serializers.PrimaryKeyRelatedField(read_only=True)
 
@@ -69,13 +84,43 @@ class SubtaskSerializer(serializers.ModelSerializer):
     title = serializers.CharField(
         required=True,
         allow_blank=False,
-        error_messages={"blank": "Escribe el nombre de la gestión."},
+        error_messages={
+            "blank": "Escribe el nombre de la gestión.",
+            "required": "Escribe el nombre de la gestión.",
+        },
     )
     category = serializers.SlugRelatedField(
-        slug_field="name", queryset=Category.objects.all(), required=False, allow_null=True
+        slug_field="name",
+        queryset=Category.objects.all(),
+        error_messages={
+            "required": "Elige una categoría.",
+            "null": "Elige una categoría.",
+            "does_not_exist": "La categoría no existe.",
+            "invalid": "La categoría no es válida.",
+        },
     )
-    estimated_hours = serializers.DecimalField(max_digits=4, decimal_places=2)
-    status = serializers.ChoiceField(choices=Subtasks.STATUS_CHOICES, required=False)
+    estimated_hours = serializers.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        error_messages={
+            "required": "Indica las horas estimadas.",
+            "invalid": "Las horas estimadas deben ser un número.",
+            "max_digits": "Las horas estimadas deben ser menores a 100.",
+            "max_whole_digits": "Las horas estimadas deben ser menores a 100.",
+            "max_decimal_places": "Usa como máximo 2 decimales en las horas estimadas.",
+        },
+    )
+    scheduled_date = serializers.DateField(
+        error_messages={
+            "required": "Elige la fecha objetivo.",
+            "invalid": "La fecha objetivo no es válida.",
+        },
+    )
+    status = serializers.ChoiceField(
+        choices=Subtasks.STATUS_CHOICES,
+        required=False,
+        error_messages={"invalid_choice": "El estado no es válido."},
+    )
 
     class Meta:
         model = Subtasks
@@ -92,7 +137,8 @@ class SubtaskSerializer(serializers.ModelSerializer):
             "executed_at",
             "created_at",
         ]
-        read_only_fields = ["eid"]  # Event ID assigned from URL parameter
+        # eid comes from the URL; executed_at is stamped by the view on status changes.
+        read_only_fields = ["eid", "executed_at", "created_at"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

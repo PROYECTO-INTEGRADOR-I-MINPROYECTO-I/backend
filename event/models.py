@@ -99,9 +99,7 @@ class Subtasks(models.Model):
     eid = models.ForeignKey('Events', models.CASCADE, db_column='eid', related_name='subtasks')
     title = models.CharField(max_length=150)
     description = models.TextField(blank=True, null=True)
-    category = models.ForeignKey(
-        Category, models.SET_NULL, null=True, blank=True, related_name='subtasks'
-    )
+    category = models.ForeignKey(Category, models.PROTECT, related_name='subtasks')
     estimated_hours = models.DecimalField(max_digits=4, decimal_places=2)
     scheduled_date = models.DateField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
