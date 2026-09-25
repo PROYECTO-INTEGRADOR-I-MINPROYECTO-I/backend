@@ -92,7 +92,6 @@ class OrganizerMixin:
         return context
 
 
-# Generic view for Event view
 @extend_schema_view(
     get=extend_schema(
         summary="List all events",
@@ -103,6 +102,21 @@ class OrganizerMixin:
         summary="Create an event",
         description="Creates a new event attached to the current organizer.",
         tags=["Eventos"],
+        examples=[
+                OpenApiExample(
+                    "Valid Subtask Payload",
+                    summary="Example of a valid event request",
+                    value={
+                        "name": "Boda Natalia & Julio",
+                        "description": "Planeación de boda completa.",
+                        "due_date": "2026-09-25",
+                        "event_type": 1,
+                        "place": "Salón de Evento Cañasgoardas",
+                        "client_contact": "123-456-8790"
+                    },
+                    request_only=True,
+                )
+            ],
     ),
 )
 class EventListCreateView(OrganizerMixin, ListCreateAPIView):
@@ -185,11 +199,6 @@ class UserRegisterView(CreateAPIView):
     queryset = Users.objects.all()
     serializer_class = UserRegisterSerializer
     permission_classes = [AllowAny]  # Allow any user to register
-    # FIXME(jdcm): UserRegisterSerializer.create() llama a Users.objects.create_user(),
-    # pero Users es un modelo plano sin manager personalizado (no hereda de
-    # AbstractBaseUser/BaseUserManager) -> este endpoint lanza AttributeError en
-    # cuanto se le haga un POST. Pendiente de que Juan Diego lo arregle (no es parte
-    # de este ajuste de organizador).
 
 
 @extend_schema_view(
@@ -209,10 +218,10 @@ class UserRegisterView(CreateAPIView):
     post=extend_schema(
         summary="Create a new subtask",
         description="""
-        Creates a new subtask associated with a specific event.
+Creates a new subtask associated with a specific event.
 
-        * **Note:** the response includes a `warnings` list (e.g. when the
-          subtask's target date falls after the event's due date).
+* **Note:** the response includes a `warnings` list (e.g. when the
+subtask's target date falls after the event's due date).
         """,
         parameters=[
             OpenApiParameter(
