@@ -1,7 +1,5 @@
+dj_database_url==3.1.2
 Django==6.1.1
-djangorestframework
-django-cors-headers
-django-environ
-dj-database-url
-psycopg[binary]
-gunicorn
+django_environ==0.14.0
+djangorestframework==3.18.1
+drf_spectacular==0.30.0
