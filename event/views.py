@@ -1,18 +1,40 @@
 from django.conf import settings
-from django.db import connection
+from django.db import IntegrityError, connection, transaction
+from django.db.models import Q
 from django.http import JsonResponse
-from rest_framework.generics import ListCreateAPIView
-from .models import Events, Subtasks, Users
-from .serializers import EventSerializer, SubtaskSerializer, UserSerializer, UserRegisterSerializer
-from drf_spectacular.utils import extend_schema, OpenApiParameter
-from rest_framework.generics import ListCreateAPIView
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample, OpenApiResponse
-from drf_spectacular.types import OpenApiTypes
+from django.utils import timezone
+
 from rest_framework import status
-from drf_spectacular.utils import extend_schema, extend_schema_view
-from rest_framework.generics import RetrieveUpdateAPIView, CreateAPIView
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.generics import (
+    ListCreateAPIView,
+    RetrieveUpdateDestroyAPIView,
+    RetrieveUpdateAPIView,
+    CreateAPIView,
+)
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+
+from drf_spectacular.utils import (
+    extend_schema,
+    extend_schema_view,
+    OpenApiParameter,
+    OpenApiExample,
+    OpenApiResponse,
+)
+
+from .models import Events, Subtasks, Users, EventType, Category
+from .exceptions import Conflict
+from .organizer import get_current_organizer
+from .serializers import (
+    EventSerializer,
+    SubtaskSerializer,
+    UserSerializer,
+    UserRegisterSerializer,
+    EventTypeSerializer,
+    CategorySerializer,
+)
+
 
 def test(request):
     return JsonResponse({
@@ -55,102 +77,156 @@ def health(request):
     })
 
 
+class OrganizerMixin:
+    """Resuelve el organizador "actual" (stub PIM1-91) y lo pasa al serializer."""
+
+    def get_organizer(self):
+        # Cached per request: several hooks (context, queryset, save) need it.
+        if not hasattr(self, "_organizer"):
+            self._organizer = get_current_organizer(self.request)
+        return self._organizer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["organizer"] = self.get_organizer()
+        return context
+
+
 # Generic view for Event view
 @extend_schema_view(
     get=extend_schema(
         summary="List all events",
         description="Returns list of all created events",
-        tags = ["Eventos"]
+        tags=["Eventos"],
     ),
     post=extend_schema(
         summary="Create an event",
-        description="Creates a new event attached to the user.",
-        tags = ["Eventos"]
-    )
+        description="Creates a new event attached to the current organizer.",
+        tags=["Eventos"],
+    ),
 )
-class EventListCreateView(ListCreateAPIView):
-    queryset = Events.objects.all()
+class EventListCreateView(OrganizerMixin, ListCreateAPIView):
     serializer_class = EventSerializer
+
+    def get_queryset(self):
+        return Events.objects.filter(user=self.get_organizer()).order_by('-created_at')
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.get_organizer())
+
 
 @extend_schema_view(
     get=extend_schema(
-        summary="List all users",
-        description="Returns list of all registered users.",
-        tags = ["Usuarios"]
+        summary="Retrieve an event",
+        description="Returns a single event owned by the current organizer.",
+        tags=["Eventos"],
     ),
+    patch=extend_schema(
+        summary="Partially update an event",
+        description="Updates one or more fields of an event owned by the current organizer.",
+        tags=["Eventos"],
+        responses={
+            200: EventSerializer,
+            400: OpenApiResponse(description="Validation error (e.g. empty name or past due date)"),
+            404: OpenApiResponse(description="Event not found for the current organizer"),
+        },
+    ),
+    delete=extend_schema(
+        summary="Delete an event",
+        description="Deletes an event owned by the current organizer. Its subtasks are deleted in cascade.",
+        tags=["Eventos"],
+        responses={204: None, 404: OpenApiResponse(description="Event not found for the current organizer")},
+    ),
+)
+class EventDetailView(OrganizerMixin, RetrieveUpdateDestroyAPIView):
+    serializer_class = EventSerializer
+    lookup_field = "eid"
+    lookup_url_kwarg = "eid"
+    http_method_names = ["get", "patch", "delete", "head", "options"]
+
+    def get_queryset(self):
+        return Events.objects.filter(user=self.get_organizer())
+
+
+@extend_schema_view(
+    get=extend_schema(
+        summary="Get current organizer",
+        description="Returns the current organizer (the same one resolved by get_current_organizer).",
+        tags=["Usuarios"],
+    ),
+    patch=extend_schema(
+        summary="Update current organizer",
+        description="Updates one or more fields of the current organizer (e.g. max_daily_hours).",
+        tags=["Usuarios"],
+    ),
+)
+class CurrentUserView(OrganizerMixin, RetrieveUpdateAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [AllowAny]  # Sin login todavía (PIM1-91): un único organizador demo.
+
+    def get_object(self):
+        # Antes este método tenía su propio get_or_create(email="demo@example.com"),
+        # que creaba un segundo organizador distinto del que usan
+        # EventListCreateView/EventSubtaskListCreateView/etc. (get_current_organizer,
+        # "demo@planificapp.com" en organizer.py). Se unifica en una sola fuente de
+        # verdad: lo que devuelve /api/yo/ es siempre el mismo organizador dueño de
+        # los eventos y gestiones creados.
+        return self.get_organizer()
+
+
+@extend_schema_view(
     post=extend_schema(
         summary="Register a new user.",
         description="Creates a new user registry.",
-        tags = ["Usuarios"]
+        tags=["Usuarios"],
     ),
 )
-class CurrentUserView(RetrieveUpdateAPIView):
-    serializer_class = UserSerializer
-    permission_classes = [AllowAny] # Just for demo
-
-
-    def get_object(self):
-        demo_user, created = Users.objects.get_or_create(
-            email='demo@example.com',
-            defaults={
-                'name': 'Demo User',
-                'password_hash': 'demo_hashed_secret',  # Placeholder hash for test
-                'max_daily_hours': 8,
-            }
-        )
-        return demo_user
-
-
 class UserRegisterView(CreateAPIView):
     queryset = Users.objects.all()
     serializer_class = UserRegisterSerializer
-    permission_classes = [AllowAny] # Allow any user to register
+    permission_classes = [AllowAny]  # Allow any user to register
+    # FIXME(jdcm): UserRegisterSerializer.create() llama a Users.objects.create_user(),
+    # pero Users es un modelo plano sin manager personalizado (no hereda de
+    # AbstractBaseUser/BaseUserManager) -> este endpoint lanza AttributeError en
+    # cuanto se le haga un POST. Pendiente de que Juan Diego lo arregle (no es parte
+    # de este ajuste de organizador).
 
 
-class EventSubtaskListCreateView(ListCreateAPIView):
-    serializer_class = SubtaskSerializer
-
-    @extend_schema(
-        summary="List or create subtasks for a specific event",
+@extend_schema_view(
+    get=extend_schema(
+        summary="List subtasks for a specific event",
+        description="Returns the subtasks that belong to the event in the URL.",
         parameters=[
             OpenApiParameter(
-                name="eid",     
-                type=int, 
-                location=OpenApiParameter.PATH, 
-                description="ID of the parent event"
+                name="eid",
+                type=int,
+                location=OpenApiParameter.PATH,
+                description="ID of the parent event",
             )
         ],
         tags=["Subtasks"],
-        examples=[
-                    OpenApiExample(
-                        "Valid Subtask Payload",
-                        summary="Example of a valid subtask request",
-                        value={
-                            "name": "Review Sprint Documentation",
-                            "status": "PENDIENTE",
-                            "due_date": "2026-10-15"
-                        },
-                        request_only=True,
-                    )
-                ]
-    )
-    def get(self): #GET: Only return subtasks belonging to the event id in URL
-        event_id = self.kwargs['eid']
-        return Subtasks.objects.filter(eid=event_id)
-
-    @extend_schema(
+    ),
+    post=extend_schema(
         summary="Create a new subtask",
         description="""
         Creates a new subtask associated with a specific event.
-        
-        * **Note:** The `due_date` must be set in the future.
-        * **Permissions:** Requires an authenticated user.
+
+        * **Note:** the response includes a `warnings` list (e.g. when the
+          subtask's target date falls after the event's due date).
         """,
-        tags=["Subtasks"],  # Groups endpoints together in Swagger UI
+        parameters=[
+            OpenApiParameter(
+                name="eid",
+                type=int,
+                location=OpenApiParameter.PATH,
+                description="ID of the parent event",
+            )
+        ],
+        tags=["Subtasks"],
         request=SubtaskSerializer,
         responses={
             201: SubtaskSerializer,
-            400: OpenApiResponse(description="Validation error (e.g., past due date or invalid enum value)"),
+            400: OpenApiResponse(description="Validation error (e.g. empty title or invalid hours)"),
             404: OpenApiResponse(description="Parent Event not found"),
         },
         examples=[
@@ -158,14 +234,153 @@ class EventSubtaskListCreateView(ListCreateAPIView):
                 "Valid Subtask Payload",
                 summary="Example of a valid subtask request",
                 value={
-                    "name": "Review Sprint Documentation",
-                    "status": "PENDIENTE",
-                    "due_date": "2026-10-15"
+                    "title": "Cotizar catering",
+                    "description": "Pedir cotización a tres proveedores",
+                    "category": "Catering",
+                    "estimated_hours": 3,
+                    "scheduled_date": "2026-10-15",
+                    "status": "pending",
                 },
                 request_only=True,
             )
-        ]
-    )
-    def post(self, serializer): #POST: Attaches to specific event
-        event = get_object_or_404(Events, pk=self.kwargs['eid'])
-        serializer.save(eid=event)
+        ],
+    ),
+)
+class EventSubtaskListCreateView(OrganizerMixin, ListCreateAPIView):
+    serializer_class = SubtaskSerializer
+
+    def get_event(self):
+        if not hasattr(self, "_event"):
+            self._event = get_object_or_404(
+                Events, pk=self.kwargs['eid'], user=self.get_organizer()
+            )
+        return self._event
+
+    def get_queryset(self):
+        return Subtasks.objects.filter(eid=self.get_event())
+
+    def perform_create(self, serializer):
+        serializer.save(eid=self.get_event())
+
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+
+        warnings = []
+        event = self.get_event()
+        scheduled_date = response.data.get("scheduled_date")
+        if scheduled_date and str(scheduled_date) > str(event.due_date.date()):
+            warnings.append("La fecha objetivo es posterior a la fecha del evento")
+
+        if warnings:
+            response.data["warnings"] = warnings
+        return response
+
+
+@extend_schema_view(
+    get=extend_schema(
+        summary="Retrieve a subtask",
+        description="Returns a single subtask that belongs to an event owned by the current organizer.",
+        tags=["Subtasks"],
+    ),
+    patch=extend_schema(
+        summary="Partially update a subtask",
+        description="""
+        Updates one or more fields of a subtask. `eid` is read-only: a
+        subtask cannot be moved to another event.
+
+        Setting `status` to `"done"` stamps `executed_at` with the current
+        time; moving it away from `"done"` clears `executed_at`.
+        """,
+        tags=["Subtasks"],
+        responses={
+            200: SubtaskSerializer,
+            400: OpenApiResponse(description="Validation error (e.g. empty title or invalid hours)"),
+            404: OpenApiResponse(description="Subtask not found for the current organizer"),
+        },
+    ),
+    delete=extend_schema(
+        summary="Delete a subtask",
+        description="Deletes a subtask owned (through its event) by the current organizer.",
+        tags=["Subtasks"],
+        responses={204: None, 404: OpenApiResponse(description="Subtask not found for the current organizer")},
+    ),
+)
+class SubtaskDetailView(OrganizerMixin, RetrieveUpdateDestroyAPIView):
+    serializer_class = SubtaskSerializer
+    lookup_field = "subtask_id"
+    lookup_url_kwarg = "subtask_id"
+    http_method_names = ["get", "patch", "delete", "head", "options"]
+
+    def get_queryset(self):
+        return Subtasks.objects.filter(eid__user=self.get_organizer())
+
+    def perform_update(self, serializer):
+        previous_status = serializer.instance.status
+        instance = serializer.save()
+        # Only on a real transition, so a retried {"status": "done"} keeps the
+        # original completion time.
+        if instance.status != previous_status and "done" in (instance.status, previous_status):
+            instance.executed_at = timezone.now() if instance.status == "done" else None
+            instance.save(update_fields=["executed_at"])
+
+
+@extend_schema_view(
+    get=extend_schema(
+        summary="List event types",
+        description="Returns the predefined event types plus the organizer's own.",
+        tags=["Tipos de evento"],
+    ),
+    post=extend_schema(
+        summary="Create an event type",
+        description="Creates a new event type for the current organizer.",
+        tags=["Tipos de evento"],
+    ),
+)
+class EventTypeListCreateView(OrganizerMixin, ListCreateAPIView):
+    serializer_class = EventTypeSerializer
+
+    def get_queryset(self):
+        organizer = self.get_organizer()
+        return EventType.objects.filter(
+            Q(user__isnull=True) | Q(user=organizer)
+        ).order_by('name')
+
+    def perform_create(self, serializer):
+        # validate_name already returns 409; this covers two concurrent POSTs
+        # that both pass validation and collide on the unique constraint.
+        try:
+            with transaction.atomic():
+                serializer.save(user=self.get_organizer())
+        except IntegrityError:
+            raise Conflict("Ya tienes un tipo de evento con ese nombre")
+
+
+@extend_schema_view(
+    get=extend_schema(
+        summary="List categories",
+        description="Returns the predefined categories plus the organizer's own.",
+        tags=["Categorías"],
+    ),
+    post=extend_schema(
+        summary="Create a category",
+        description="Creates a new category for the current organizer.",
+        tags=["Categorías"],
+    ),
+)
+class CategoryListCreateView(OrganizerMixin, ListCreateAPIView):
+    serializer_class = CategorySerializer
+
+    def get_queryset(self):
+        organizer = self.get_organizer()
+        return Category.objects.filter(
+            Q(user__isnull=True) | Q(user=organizer)
+        ).order_by('name')
+
+    def perform_create(self, serializer):
+        # validate_name already returns 409; this covers two concurrent POSTs
+        # that both pass validation and collide on the unique constraint.
+        try:
+            with transaction.atomic():
+                serializer.save(user=self.get_organizer())
+        except IntegrityError:
+            raise Conflict("Ya tienes una categoría con ese nombre")
