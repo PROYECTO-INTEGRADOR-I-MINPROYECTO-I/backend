@@ -209,6 +209,7 @@ REST_FRAMEWORK = {
     ]
     + (["rest_framework.renderers.BrowsableAPIRenderer"] if DEBUG else []),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'EXCEPTION_HANDLER': 'event.exceptions.custom_exception_handler',
 }
 
 
