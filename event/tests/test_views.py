@@ -1,6 +1,7 @@
 import json
 from django.test import TestCase, RequestFactory
 from django.urls import reverse
+from django.db import connection
 
 from event.views import test
 
@@ -22,3 +23,16 @@ class TestViewTestCase(TestCase):
 
     def test2(self):
         self.assertEqual(1 + 1, 2)
+
+    def test_database_connection(self):
+        """Directly test that the test database is connected and responding."""
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                result = cursor.fetchone()
+            
+            # If the database is connected, SELECT 1 returns a tuple (1,)
+            self.assertEqual(result, (1,))
+        except Exception as e:
+            self.fail(f"Database connection failed with error: {e}")
+
