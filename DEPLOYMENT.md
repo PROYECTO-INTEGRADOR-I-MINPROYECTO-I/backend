@@ -34,7 +34,8 @@ Para tener datos de prueba sin cargarlos a mano (organizador, eventos y gestione
 ```bash
 python manage.py seed_demo            # crea el organizador demo@planificapp.com (password demo1234)
 python manage.py seed_demo --reset    # borra sus eventos y los recrea desde cero
-python manage.py seed_demo --password otra-clave
+python manage.py seed_demo --password otra-clave   # cambia la contraseña del demo
+# En prod se niega a correr salvo con --force.
 ```
 
 Es idempotente: si ya existen eventos del demo, no los duplica (avisa por consola) salvo que se use `--reset`.

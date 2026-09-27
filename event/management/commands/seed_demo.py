@@ -7,8 +7,9 @@ sin tener que cargar datos a mano.
 import datetime
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth.hashers import make_password
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
@@ -16,6 +17,7 @@ from event.models import Category, EventType, Events, Subtasks, Users
 
 DEMO_EMAIL = "demo@planificapp.com"
 DEMO_NAME = "Demo"
+DEMO_PASSWORD = "demo1234"
 
 
 class Command(BaseCommand):
@@ -29,24 +31,42 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--password",
-            default="demo1234",
-            help="Contraseña del organizador demo (default: demo1234).",
+            help=(
+                "Contraseña del organizador demo. Si el usuario ya existe solo "
+                "se cambia cuando se pasa esta opción (al crearlo: demo1234)."
+            ),
+        )
+        parser.add_argument(
+            "--force",
+            action="store_true",
+            help="Permite correr el comando en prod.",
         )
 
     def handle(self, *args, **options):
+        if settings.ENVIRONMENT == "prod" and not options["force"]:
+            raise CommandError("seed_demo no corre en prod sin --force.")
+
         reset = options["reset"]
         password = options["password"]
 
-        user, _ = Users.objects.get_or_create(
+        user, creado = Users.objects.get_or_create(
             email=DEMO_EMAIL,
-            defaults={"name": DEMO_NAME, "password_hash": make_password(password)},
+            defaults={
+                "name": DEMO_NAME,
+                "password_hash": make_password(password or DEMO_PASSWORD),
+                "max_daily_hours": Decimal("6.00"),
+            },
         )
-        # Alineamos siempre nombre/contraseña/límite: el comando debe dar el
-        # mismo resultado sin importar el estado previo del usuario demo.
-        user.name = DEMO_NAME
-        user.password_hash = make_password(password)
-        user.max_daily_hours = Decimal("6.00")
-        user.save()
+        if creado:
+            password = password or DEMO_PASSWORD
+        else:
+            # Un usuario demo existente conserva su contraseña y su límite,
+            # salvo que se pida explícitamente.
+            if password:
+                user.password_hash = make_password(password)
+            if reset:
+                user.max_daily_hours = Decimal("6.00")
+            user.save()
 
         eventos_existentes = Events.objects.filter(user=user)
         if reset:
@@ -131,7 +151,7 @@ class Command(BaseCommand):
         self.stdout.write("")
         self.stdout.write("Credenciales del organizador demo:")
         self.stdout.write(f"  email:    {user.email}")
-        self.stdout.write(f"  password: {password}")
+        self.stdout.write(f"  password: {password or '(sin cambios)'}")
         self.stdout.write("")
         self.stdout.write(f"Eventos: {eventos.count()} | Gestiones: {total_gestiones}")
         for evento in eventos:
