@@ -1,7 +1,18 @@
+from decimal import Decimal
+
+from django.contrib.auth import password_validation
 from django.contrib.auth.hashers import make_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
 
 from .models import User
+
+
+class LoginSerializer(serializers.Serializer):
+    # Only documents the login body in Swagger; the actual validation lives in the view.
+    email = serializers.EmailField()
+    password = serializers.CharField(style={'input_type': 'password'})
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -9,32 +20,66 @@ class UserSerializer(serializers.ModelSerializer):
     max_daily_hours = serializers.DecimalField(
         max_digits=4,
         decimal_places=2,
-        min_value=0.0,  # Prevents negative values
+        min_value=Decimal("0"),  # Prevents negative values
     )
 
     class Meta:
         model = User
-        # No password_hash here: this is what GET/PATCH /api/yo/ returns.
+        # No password_hash here: it must never reach a JSON response.
         fields = ['user_id', 'name', 'email', 'max_daily_hours']
 
 
 class UserRegisterSerializer(serializers.ModelSerializer):
-    password_hash = serializers.CharField(
+    name = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        error_messages={
+            "blank": "Escribe tu nombre.",
+            "required": "Escribe tu nombre.",
+        },
+    )
+    email = serializers.EmailField(
+        required=True,
+        error_messages={
+            "required": "Escribe tu correo.",
+            "invalid": "El correo no es válido.",
+        },
+    )
+    password = serializers.CharField(
         write_only=True,          # <--- NEVER returned in JSON response!
         required=True,
-        style={'input_type': 'password'}
+        min_length=8,
+        style={'input_type': 'password'},
+        error_messages={
+            "required": "Escribe tu contraseña.",
+            "min_length": "La contraseña debe tener al menos 8 caracteres.",
+        },
     )
 
     class Meta:
         model = User
-        fields = ['user_id', 'email', 'name', 'max_daily_hours', 'password_hash']
+        fields = ['user_id', 'email', 'name', 'max_daily_hours', 'password']
+
+    def validate_email(self, value):
+        value = value.lower()
+        if User.objects.filter(email__iexact=value).exists():
+            # Neutral message: we don't confirm the email is already registered.
+            raise ValidationError("No se pudo completar el registro con esos datos.")
+        return value
+
+    def validate_password(self, value):
+        try:
+            password_validation.validate_password(value)
+        except DjangoValidationError as exc:
+            raise ValidationError(exc.messages)
+        return value
 
     def create(self, validated_data):
-        validated_data['password_hash'] = make_password(validated_data['password_hash'])
+        password = validated_data.pop('password')
         user = User.objects.create(
             name=validated_data['name'],
-            email=validated_data.get('email', ''),
-            password_hash=validated_data['password_hash'],
-            max_daily_hours=validated_data['max_daily_hours'],
+            email=validated_data['email'],
+            password_hash=make_password(password),
+            **({'max_daily_hours': validated_data['max_daily_hours']} if 'max_daily_hours' in validated_data else {}),
         )
         return user
