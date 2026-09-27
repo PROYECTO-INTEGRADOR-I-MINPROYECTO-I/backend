@@ -2,8 +2,11 @@ import datetime
 
 from django.db.models import Q
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
+
+from planning.services import event_progress
 
 from ..models import Event, EventType
 
@@ -17,6 +20,13 @@ def validate_future_date(value):
     if check_date < today:
         raise ValidationError("La fecha debe ser hoy o posterior.")
     return value
+
+
+class EventProgressSerializer(serializers.Serializer):
+    # Only to document the shape of "progress" in Swagger.
+    completed = serializers.IntegerField()
+    total = serializers.IntegerField()
+    percentage = serializers.IntegerField()
 
 
 class EventSerializer(serializers.ModelSerializer):
@@ -47,6 +57,8 @@ class EventSerializer(serializers.ModelSerializer):
         },
     )
     user = serializers.PrimaryKeyRelatedField(read_only=True)
+    # Progress (done/total) of the event's subtasks; see services.event_progress.
+    progress = serializers.SerializerMethodField()
 
     class Meta:
         model = Event
@@ -61,8 +73,13 @@ class EventSerializer(serializers.ModelSerializer):
             "client_contact",
             "created_at",
             "updated_at",
+            "progress",
         ]
-        read_only_fields = ["eid", "user", "created_at", "updated_at"]
+        read_only_fields = ["eid", "user", "created_at", "updated_at", "progress"]
+
+    @extend_schema_field(EventProgressSerializer)
+    def get_progress(self, obj):
+        return event_progress(obj)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
