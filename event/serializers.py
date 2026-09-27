@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
 from django.utils import timezone
@@ -25,6 +26,13 @@ def validate_future_date(value):
     if check_date < today:
         raise ValidationError("La fecha debe ser hoy o posterior.")
     return value
+
+
+class ProgresoEventoSerializer(serializers.Serializer):
+    # Solo para documentar la forma de "progress" en Swagger.
+    completadas = serializers.IntegerField()
+    total = serializers.IntegerField()
+    porcentaje = serializers.IntegerField()
 
 
 # Event model serializer for parsing requests
@@ -74,6 +82,7 @@ class EventSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["eid", "user", "created_at", "updated_at", "progress"]
 
+    @extend_schema_field(ProgresoEventoSerializer)
     def get_progress(self, obj):
         return progreso_evento(obj)
 

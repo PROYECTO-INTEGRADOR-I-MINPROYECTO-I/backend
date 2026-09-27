@@ -193,6 +193,11 @@ Creates a new subtask associated with a specific event.
 
 * **Note:** the response includes a `warnings` list (e.g. when the
 subtask's target date falls after the event's due date).
+
+* **Sobrecarga:** si con esta gestión el día supera el límite diario del
+organizador, se agrega el mensaje a `warnings` y un objeto `conflicto`
+(`hay_conflicto`, `horas_planificadas`, `limite`, `fecha`, `mensaje`).
+No bloquea el guardado.
         """,
         parameters=[
             OpenApiParameter(
@@ -281,6 +286,9 @@ class EventSubtaskListCreateView(OrganizerMixin, ListCreateAPIView):
 
         Setting `status` to `"done"` stamps `executed_at` with the current
         time; moving it away from `"done"` clears `executed_at`.
+
+        If the new date/hours overload the day, the response carries
+        `warnings` and a `conflicto` object (same shape as on create).
         """,
         tags=["Subtasks"],
         responses={
