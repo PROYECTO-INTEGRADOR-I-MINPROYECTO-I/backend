@@ -88,12 +88,21 @@ class Events(models.Model):
         return self.name
 
 
+class SubtasksQuerySet(models.QuerySet):
+    def del_organizador(self, user):
+        # Subtasks no tiene FK directa a Users: el dueño se resuelve a
+        # través del evento (eid__user).
+        return self.filter(eid__user=user)
+
+
 class Subtasks(models.Model):
     STATUS_CHOICES = [
         ('pending', 'pending'),
         ('done', 'done'),
         ('postponed', 'postponed'),
     ]
+
+    objects = SubtasksQuerySet.as_manager()
 
     subtask_id = models.AutoField(primary_key=True)
     eid = models.ForeignKey('Events', models.CASCADE, db_column='eid', related_name='subtasks')

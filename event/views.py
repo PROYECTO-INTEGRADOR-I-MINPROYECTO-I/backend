@@ -22,7 +22,6 @@ from drf_spectacular.utils import (
 
 from .models import Events, Subtasks, Users, EventType, Category
 from .exceptions import Conflict
-from .organizer import get_current_organizer
 from .serializers import (
     EventSerializer,
     SubtaskSerializer,
@@ -73,13 +72,10 @@ def health(request):
 
 
 class OrganizerMixin:
-    """Resuelve el organizador "actual" (stub PIM1-91) y lo pasa al serializer."""
+    """Expone el organizador autenticado (request.user) al serializer."""
 
     def get_organizer(self):
-        # Cached per request: several hooks (context, queryset, save) need it.
-        if not hasattr(self, "_organizer"):
-            self._organizer = get_current_organizer(self.request)
-        return self._organizer
+        return self.request.user
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -277,7 +273,7 @@ class SubtaskDetailView(OrganizerMixin, RetrieveUpdateDestroyAPIView):
     http_method_names = ["get", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
-        return Subtasks.objects.filter(eid__user=self.get_organizer())
+        return Subtasks.objects.del_organizador(self.get_organizer())
 
     def perform_update(self, serializer):
         previous_status = serializer.instance.status

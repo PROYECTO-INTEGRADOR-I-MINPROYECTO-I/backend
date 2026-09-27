@@ -106,22 +106,11 @@ class LogoutView(APIView):
     tags=["Auth"],
     responses={200: UserSerializer, 401: OpenApiResponse(description="No hay sesión activa")},
 )
-class MeView(SessionAuthHeaderMixin, APIView):
-    permission_classes = [AllowAny]
-    authentication_classes = []
+class MeView(APIView):
+    # Usa la autenticación y el permiso por defecto (sesión + IsOrganizador).
 
     def get(self, request):
-        user_id = request.session.get("user_id")
-        if not user_id:
-            raise InvalidCredentials()
-
-        user = Users.objects.filter(pk=user_id).first()
-        if user is None:
-            # La sesión apunta a un usuario que ya no existe.
-            request.session.flush()
-            raise InvalidCredentials()
-
-        return Response(UserSerializer(user).data)
+        return Response(UserSerializer(request.user).data)
 
 
 @extend_schema_view(
