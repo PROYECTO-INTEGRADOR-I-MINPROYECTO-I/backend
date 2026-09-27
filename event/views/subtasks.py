@@ -135,7 +135,7 @@ class SubtaskDetailView(OrganizerMixin, RetrieveUpdateDestroyAPIView):
     http_method_names = ["get", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
-        return Subtask.objects.filter(eid__user=self.get_organizer())
+        return Subtask.objects.for_organizer(self.get_organizer())
 
     def perform_update(self, serializer):
         previous_status = serializer.instance.status

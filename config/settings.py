@@ -210,6 +210,22 @@ REST_FRAMEWORK = {
         "rest_framework.renderers.JSONRenderer",
     ]
     + (["rest_framework.renderers.BrowsableAPIRenderer"] if DEBUG else []),
+    # Only JSON: the session cookie is SameSite=None, so a cross-origin
+    # form-urlencoded or multipart request could still get past CORS/CSRF in
+    # some edge cases. Restricting the parser to JSON closes that vector
+    # without relying on the browser to block the request.
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'accounts.authentication.OrganizerSessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'accounts.permissions.IsOrganizer',
+    ],
+    # User isn't a contrib.auth AnonymousUser: when there's no session,
+    # request.user is simply None.
+    'UNAUTHENTICATED_USER': None,
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'EXCEPTION_HANDLER': 'event.exceptions.custom_exception_handler',
     'DEFAULT_THROTTLE_RATES': {
@@ -271,4 +287,8 @@ Welcome to the Event Management API.
         'defaultModelsExpandDepth': 2,
         'defaultModelExpandDepth': 2,
     },
+    # /api/docs and /api/schema must be reachable without a session, even
+    # though the rest of the API requires login.
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.AllowAny'],
+    'SERVE_AUTHENTICATION': [],
 }
