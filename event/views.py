@@ -480,10 +480,28 @@ día (gestiones y horas completadas vs. totales).
             description="'gestiones' o 'horas' (default 'gestiones'). Solo cambia el campo "
                         "'metrica' de la respuesta: ambas métricas siempre viajan en progreso_dia.",
         ),
+        OpenApiParameter(
+            name="event_id",
+            type=int,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            description="Filtra todas las listas y la barra de progreso a un solo evento "
+                        "del organizador. 404 si no existe o es de otro organizador.",
+        ),
+        OpenApiParameter(
+            name="status",
+            type=str,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            description="pending|done|postponed (o alias PENDING|EXECUTED|POSTPONED). Filtra "
+                        "las listas de gestiones; 'pospuestas' solo aparece con status=postponed. "
+                        "No afecta la barra de progreso del día.",
+        ),
     ],
     responses={
         200: OpenApiResponse(description="Resumen del día"),
-        400: OpenApiResponse(description="dias_proximos o metrica inválidos"),
+        400: OpenApiResponse(description="Parámetros de consulta inválidos"),
+        404: OpenApiResponse(description="event_id no existe o pertenece a otro organizador"),
     },
     examples=[
         OpenApiExample(
@@ -507,6 +525,8 @@ día (gestiones y horas completadas vs. totales).
 )
 class TodayView(OrganizerMixin, APIView):
     METRICAS_VALIDAS = ("gestiones", "horas")
+    # Alias que acepta el front además de los valores nativos del modelo.
+    STATUS_ALIASES = {"PENDING": "pending", "EXECUTED": "done", "POSTPONED": "postponed"}
 
     def _dias_proximos(self, request):
         raw = request.query_params.get("dias_proximos", "7")
@@ -524,14 +544,42 @@ class TodayView(OrganizerMixin, APIView):
             raise ValidationError("metrica debe ser 'gestiones' o 'horas'")
         return valor
 
+    def _status(self, request):
+        raw = request.query_params.get("status")
+        if raw is None:
+            return None
+        valor = self.STATUS_ALIASES.get(raw, raw)
+        if valor not in dict(Subtasks.STATUS_CHOICES):
+            raise ValidationError("El estado no es válido.")
+        return valor
+
+    def _event_id(self, request, organizador):
+        raw = request.query_params.get("event_id")
+        if raw is None:
+            return None
+        try:
+            event_id = int(raw)
+        except (TypeError, ValueError):
+            raise ValidationError("event_id debe ser un número entero.")
+        # 404 tanto si no existe como si es de otro organizador: no delatamos
+        # la existencia de eventos ajenos.
+        evento = get_object_or_404(Events, eid=event_id, user=organizador)
+        return evento.eid
+
     def get(self, request, *args, **kwargs):
         dias_proximos = self._dias_proximos(request)
         metrica = self._metrica(request)
-        hoy = timezone.localdate()
         organizador = self.get_organizer()
+        event_id = self._event_id(request, organizador)
+        estado = self._status(request)
+        hoy = timezone.localdate()
 
-        grupos = agrupar_gestiones(organizador, hoy, dias_proximos=dias_proximos)
-        progreso = progreso_dia(organizador, hoy)
+        grupos = agrupar_gestiones(
+            organizador, hoy, evento_id=event_id, dias_proximos=dias_proximos, estado=estado
+        )
+        # La barra del día no se filtra por estado: es la partición
+        # pendientes/completadas de hoy, no una lista filtrable.
+        progreso = progreso_dia(organizador, hoy, evento_id=event_id)
 
         contexto = {"organizer": organizador}
         data = {
@@ -548,5 +596,11 @@ class TodayView(OrganizerMixin, APIView):
             },
             "proximas": TodaySubtaskSerializer(grupos["proximas"], many=True, context=contexto).data,
             "progreso_dia": _serializar_progreso_dia(progreso),
+            "filtros": {"event_id": event_id, "status": estado},
         }
+        # "pospuestas" solo viaja cuando se pidió explícitamente ese estado.
+        if estado == "postponed":
+            data["pospuestas"] = TodaySubtaskSerializer(
+                grupos["pospuestas"], many=True, context=contexto
+            ).data
         return Response(data)
