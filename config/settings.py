@@ -211,9 +211,14 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'EXCEPTION_HANDLER': 'event.exceptions.custom_exception_handler',
     'DEFAULT_THROTTLE_RATES': {
-        # Frena intentos de fuerza bruta contra el login.
+        # Frena intentos de fuerza bruta contra el login. El contador vive en
+        # la caché en memoria (por proceso): con varios workers de gunicorn
+        # cada uno lleva su propia cuenta.
         'login': env('LOGIN_THROTTLE_RATE', default='5/min'),
     },
+    # Proxies delante de la app (Render). Con None DRF toma la IP del primer
+    # valor de X-Forwarded-For, que el cliente puede falsear.
+    'NUM_PROXIES': env.int('NUM_PROXIES', default=None),
 }
 
 
