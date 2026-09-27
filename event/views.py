@@ -9,10 +9,7 @@ from rest_framework import status
 from rest_framework.generics import (
     ListCreateAPIView,
     RetrieveUpdateDestroyAPIView,
-    RetrieveUpdateAPIView,
-    CreateAPIView,
 )
-from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from drf_spectacular.utils import (
@@ -29,8 +26,6 @@ from .organizer import get_current_organizer
 from .serializers import (
     EventSerializer,
     SubtaskSerializer,
-    UserSerializer,
-    UserRegisterSerializer,
     EventTypeSerializer,
     CategorySerializer,
 )
@@ -160,45 +155,6 @@ class EventDetailView(OrganizerMixin, RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return Events.objects.filter(user=self.get_organizer())
-
-
-@extend_schema_view(
-    get=extend_schema(
-        summary="Get current organizer",
-        description="Returns the current organizer (the same one resolved by get_current_organizer).",
-        tags=["Usuarios"],
-    ),
-    patch=extend_schema(
-        summary="Update current organizer",
-        description="Updates one or more fields of the current organizer (e.g. max_daily_hours).",
-        tags=["Usuarios"],
-    ),
-)
-class CurrentUserView(OrganizerMixin, RetrieveUpdateAPIView):
-    serializer_class = UserSerializer
-    permission_classes = [AllowAny]  # Sin login todavía (PIM1-91): un único organizador demo.
-
-    def get_object(self):
-        # Antes este método tenía su propio get_or_create(email="demo@example.com"),
-        # que creaba un segundo organizador distinto del que usan
-        # EventListCreateView/EventSubtaskListCreateView/etc. (get_current_organizer,
-        # "demo@planificapp.com" en organizer.py). Se unifica en una sola fuente de
-        # verdad: lo que devuelve /api/yo/ es siempre el mismo organizador dueño de
-        # los eventos y gestiones creados.
-        return self.get_organizer()
-
-
-@extend_schema_view(
-    post=extend_schema(
-        summary="Register a new user.",
-        description="Creates a new user registry.",
-        tags=["Usuarios"],
-    ),
-)
-class UserRegisterView(CreateAPIView):
-    queryset = Users.objects.all()
-    serializer_class = UserRegisterSerializer
-    permission_classes = [AllowAny]  # Allow any user to register
 
 
 @extend_schema_view(

@@ -1,9 +1,13 @@
+from decimal import Decimal
+
 from rest_framework import serializers
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 import datetime
 from django.contrib.auth.hashers import make_password
+from django.contrib.auth import password_validation
 from .models import Events, Subtasks, Users, EventType, Category
 from .exceptions import Conflict
 
@@ -164,7 +168,7 @@ class UserSerializer(serializers.ModelSerializer):
     max_daily_hours = serializers.DecimalField(
         max_digits=4,
         decimal_places=2,
-        min_value=0.0,  # Prevents negative values
+        min_value=Decimal("0"),  # Prevents negative values
     )
 
     class Meta:
@@ -175,23 +179,57 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class UserRegisterSerializer(serializers.ModelSerializer):
-    password_hash = serializers.CharField(
+    name = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        error_messages={
+            "blank": "Escribe tu nombre.",
+            "required": "Escribe tu nombre.",
+        },
+    )
+    email = serializers.EmailField(
+        required=True,
+        error_messages={
+            "required": "Escribe tu correo.",
+            "invalid": "El correo no es válido.",
+        },
+    )
+    password = serializers.CharField(
         write_only=True,          # <--- NEVER returned in JSON response!
         required=True,
-        style={'input_type': 'password'}
+        min_length=8,
+        style={'input_type': 'password'},
+        error_messages={
+            "required": "Escribe tu contraseña.",
+            "min_length": "La contraseña debe tener al menos 8 caracteres.",
+        },
     )
 
     class Meta:
         model = Users
-        fields = ['user_id', 'email', 'name', 'max_daily_hours', 'password_hash']
+        fields = ['user_id', 'email', 'name', 'max_daily_hours', 'password']
+
+    def validate_email(self, value):
+        value = value.lower()
+        if Users.objects.filter(email__iexact=value).exists():
+            # Mensaje neutro: no confirmamos que el correo ya está registrado.
+            raise ValidationError("No se pudo completar el registro con esos datos.")
+        return value
+
+    def validate_password(self, value):
+        try:
+            password_validation.validate_password(value)
+        except DjangoValidationError as exc:
+            raise ValidationError(exc.messages)
+        return value
 
     def create(self, validated_data):
-        validated_data['password_hash'] = make_password(validated_data['password_hash'])
+        password = validated_data.pop('password')
         user = Users.objects.create(
             name=validated_data['name'],
-            email=validated_data.get('email', ''),
-            password_hash=validated_data['password_hash'],
-            max_daily_hours=validated_data['max_daily_hours'],
+            email=validated_data['email'],
+            password_hash=make_password(password),
+            **({'max_daily_hours': validated_data['max_daily_hours']} if 'max_daily_hours' in validated_data else {}),
         )
         return user
 
