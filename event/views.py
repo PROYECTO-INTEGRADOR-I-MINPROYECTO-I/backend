@@ -237,7 +237,7 @@ class EventSubtaskListCreateView(OrganizerMixin, ListCreateAPIView):
         return self._event
 
     def get_queryset(self):
-        return Subtasks.objects.filter(eid=self.get_event())
+        return Subtasks.objects.filter(eid=self.get_event()).select_related("category")
 
     def perform_create(self, serializer):
         # Evaluamos el conflicto de carga ANTES de guardar: así carga_diaria
