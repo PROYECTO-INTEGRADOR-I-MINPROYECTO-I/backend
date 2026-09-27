@@ -10,7 +10,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .models import Users
-from .serializers import UserRegisterSerializer, UserSerializer
+from .serializers import LoginSerializer, UserRegisterSerializer, UserSerializer
 
 # Hash "de mentira" para comparar contra él cuando el correo no existe: así
 # check_password tarda lo mismo que con un usuario real y no delatamos por
@@ -41,8 +41,19 @@ class SessionAuthHeaderMixin:
 
 @extend_schema(
     summary="Iniciar sesión",
-    description="Autentica al usuario con correo y contraseña, e inicia sesión.",
+    description=(
+        "Autentica al usuario con correo y contraseña e inicia sesión con una "
+        "cookie. Correo inexistente y contraseña incorrecta responden igual. "
+        "Máximo 5 intentos por minuto."
+    ),
     tags=["Auth"],
+    request=LoginSerializer,
+    responses={
+        200: UserSerializer,
+        400: OpenApiResponse(description="Falta el correo o la contraseña"),
+        401: OpenApiResponse(description="Credenciales inválidas"),
+        429: OpenApiResponse(description="Demasiados intentos"),
+    },
 )
 class LoginView(SessionAuthHeaderMixin, APIView):
     permission_classes = [AllowAny]
@@ -77,6 +88,7 @@ class LoginView(SessionAuthHeaderMixin, APIView):
     summary="Cerrar sesión",
     description="Termina la sesión actual. Es idempotente: siempre responde 204.",
     tags=["Auth"],
+    request=None,
     responses={204: None},
 )
 class LogoutView(APIView):
@@ -117,6 +129,10 @@ class MeView(SessionAuthHeaderMixin, APIView):
         summary="Registrar usuario",
         description="Crea una cuenta nueva e inicia sesión.",
         tags=["Auth"],
+        responses={
+            201: UserSerializer,
+            400: OpenApiResponse(description="Datos inválidos o correo no disponible"),
+        },
     ),
 )
 class RegisterView(CreateAPIView):

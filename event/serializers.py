@@ -163,6 +163,12 @@ class SubtaskSerializer(serializers.ModelSerializer):
         return value
 
 
+class LoginSerializer(serializers.Serializer):
+    # Solo documenta el body del login en Swagger; la validación vive en la vista.
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True, style={"input_type": "password"})
+
+
 class UserSerializer(serializers.ModelSerializer):
     name = serializers.CharField(required=True, allow_blank=False)  # No empty named user allowed
     max_daily_hours = serializers.DecimalField(
