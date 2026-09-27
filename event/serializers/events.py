@@ -12,7 +12,10 @@ from ..models import Event, EventType
 
 
 def validate_future_date(value):
-    today = timezone.now().date()
+    # localdate() and not now().date(): with TIME_ZONE in America/Bogota,
+    # using now() in UTC runs the server's "today" several hours off from
+    # the organizer's (same bug the TIME_ZONE setting fixes).
+    today = timezone.localdate()
 
     # value can be a date or a datetime; only the date part matters here.
     check_date = value.date() if isinstance(value, datetime.datetime) else value
