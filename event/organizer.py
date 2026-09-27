@@ -1,15 +1,15 @@
-from .models import Users
+from accounts.models import User
 
 
 def get_current_organizer(request):
-    """Devuelve el organizador "actual" para la request.
+    """Returns the "current" organizer for the request.
 
-    TODO(PIM1-91): esto es un stub temporal mientras no hay autenticación.
-    El front (src/lib/demo-auth.ts) asume un único usuario demo con este
-    correo; cuando se implemente auth real, esta función debe reemplazarse
-    por la resolución del usuario autenticado a partir de la request.
+    TODO(PIM1-91): this is a temporary stub until there's real authentication.
+    The frontend (src/lib/demo-auth.ts) assumes a single demo user with this
+    email; once real auth is implemented, this function should be replaced by
+    resolving the authenticated user from the request.
     """
-    organizer, _ = Users.objects.get_or_create(
+    organizer, _ = User.objects.get_or_create(
         email="demo@planificapp.com",
         defaults={
             "name": "Demo",

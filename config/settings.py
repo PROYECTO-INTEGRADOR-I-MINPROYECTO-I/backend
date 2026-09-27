@@ -18,16 +18,16 @@ import environ
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Carga de variables de entorno desde .env (si existe) y del entorno del sistema.
+# Loads environment variables from .env (if present) and from the system environment.
 env = environ.Env()
 environ.Env.read_env(BASE_DIR / ".env")
 
-# Entorno de ejecución: dev | qa | prod. Controla los defaults más abajo.
+# Runtime environment: dev | qa | prod. Controls the defaults below.
 ENVIRONMENT = env("ENVIRONMENT", default="dev")
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# En dev se permite un valor por defecto inseguro para poder arrancar sin .env.
-# En qa/prod es obligatorio definir SECRET_KEY, si falta la app no debe levantar.
+# In dev an insecure default is allowed so the app can start without a .env.
+# In qa/prod SECRET_KEY is mandatory; if missing the app must fail to boot.
 SECRET_KEY = env(
     "SECRET_KEY",
     default="django-insecure-8_(7@2lv%as@*uldp$0n1z=u%wzp=2@!039ka43a^op-nc_p4a"
@@ -40,7 +40,7 @@ DEBUG = env.bool("DEBUG", default=(ENVIRONMENT == "dev"))
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[])
 
-# Render inyecta el hostname externo del servicio en esta variable.
+# Render injects the service's external hostname in this variable.
 RENDER_EXTERNAL_HOSTNAME = env("RENDER_EXTERNAL_HOSTNAME", default=None)
 if RENDER_EXTERNAL_HOSTNAME and RENDER_EXTERNAL_HOSTNAME not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
@@ -59,6 +59,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'drf_spectacular',
     'event',
+    'accounts',
+    'planning',
 ]
 
 MIDDLEWARE = [
@@ -95,14 +97,14 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
-# Si hay DATABASE_URL en el entorno usamos Postgres (Render la provee).
-# Si no, caemos a SQLite para que el proyecto arranque sin necesidad de .env.
+# If DATABASE_URL is present we use Postgres (Render provides it).
+# Otherwise we fall back to SQLite so the project can start without a .env.
 if env("DATABASE_URL", default=None):
-    # El pooler de Supabase expone dos puertos con comportamientos distintos:
-    #   5432 -> session pooler: admite conexiones persistentes (lo que queremos).
-    #   6543 -> transaction pooler: recicla la conexión entre transacciones, así
-    #           que no soporta ni conn_max_age ni prepared statements.
-    # Detectamos el puerto para no romper si alguien pega la URL del 6543.
+    # Supabase's pooler exposes two ports with different behavior:
+    #   5432 -> session pooler: supports persistent connections (what we want).
+    #   6543 -> transaction pooler: recycles the connection between transactions,
+    #           so it doesn't support conn_max_age or prepared statements.
+    # We detect the port so nothing breaks if someone pastes the 6543 URL.
     _db = dj_database_url.config(conn_max_age=600, ssl_require=True)
 
     if str(_db.get("PORT")) == "6543":
@@ -159,9 +161,9 @@ STATIC_URL = 'static/'
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-# En dev los correos se imprimen en consola. En qa/prod se envían por SMTP
-# con credenciales tomadas del entorno; si no se configura EMAIL_HOST, se usa
-# el backend dummy para no romper el arranque (los correos se descartan).
+# In dev emails are printed to the console. In qa/prod they're sent via SMTP
+# with credentials taken from the environment; if EMAIL_HOST isn't set, the
+# dummy backend is used so the app doesn't fail to boot (emails are discarded).
 if ENVIRONMENT == "dev":
     MAILERS = {
         "default": {
@@ -192,17 +194,17 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="no-reply@planificapp.loc
 
 
 # CORS / CSRF
-# El backend es consumido por el frontend en otro dominio, así que los
-# orígenes permitidos se configuran explícitamente por entorno.
-# NUNCA usar CORS_ALLOW_ALL_ORIGINS: cada entorno debe declarar sus orígenes.
+# The backend is consumed by the frontend on another domain, so the allowed
+# origins are configured explicitly per environment.
+# NEVER use CORS_ALLOW_ALL_ORIGINS: each environment must declare its origins.
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 CORS_ALLOW_CREDENTIALS = True
 
 
 # Django REST Framework
-# El renderer navegable (browsable API) solo se activa en DEBUG, para no
-# exponerlo en qa/prod.
+# The browsable API renderer is only enabled in DEBUG, so it's not exposed
+# in qa/prod.
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
@@ -213,28 +215,29 @@ REST_FRAMEWORK = {
 }
 
 
-# Seguridad adicional cuando DEBUG está apagado (qa y prod).
+# Extra security once DEBUG is off (qa and prod).
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SECURE_SSL_REDIRECT = True
 
-    # El health check de Render puede llegar sin la cabecera X-Forwarded-Proto.
-    # Si eso pasa, el redirect a https devuelve un 301 y Render da el deploy por
-    # fallido aunque el servicio esté sano. Eximimos esa ruta del redirect.
+    # Render's health check can arrive without the X-Forwarded-Proto header.
+    # If that happens, the redirect to https returns a 301 and Render marks
+    # the deploy as failed even though the service is healthy. We exempt
+    # that route from the redirect.
     SECURE_REDIRECT_EXEMPT = [r"^api/health/$"]
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 
-    # El frontend vive en otro dominio (planificapp-web-*.onrender.com) y llama
-    # a la API con credentials: "include". Con el valor por defecto "Lax" el
-    # navegador NO adjunta la cookie de sesión en peticiones fetch cross-site,
-    # así que la autenticación no funcionaría. "None" exige cookies Secure,
-    # que ya están activadas arriba.
+    # The frontend lives on another domain (planificapp-web-*.onrender.com) and
+    # calls the API with credentials: "include". With the default "Lax" value
+    # the browser does NOT attach the session cookie on cross-site fetch
+    # requests, so authentication wouldn't work. "None" requires Secure
+    # cookies, which are already enabled above.
     SESSION_COOKIE_SAMESITE = "None"
     CSRF_COOKIE_SAMESITE = "None"
 
-    # HSTS solo en prod: en qa preferimos poder revertir a HTTP sin esperar
-    # a que expire el header en los navegadores de los usuarios.
+    # HSTS only in prod: in qa we'd rather be able to revert to HTTP without
+    # waiting for the header to expire in users' browsers.
     if ENVIRONMENT == "prod":
         SECURE_HSTS_SECONDS = 31536000
         SECURE_HSTS_INCLUDE_SUBDOMAINS = True
