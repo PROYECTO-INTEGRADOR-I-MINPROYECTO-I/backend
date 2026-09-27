@@ -30,6 +30,7 @@ from .serializers import (
     CategorySerializer,
     UserSettingsSerializer,
 )
+from .services import ESTADOS_CARGA, anotar_progreso, evaluar_conflicto
 
 
 def test(request):
@@ -71,6 +72,19 @@ def health(request):
         "environment": settings.ENVIRONMENT,
         "database": "ok",
     })
+
+
+def _serializar_conflicto(conflicto):
+    # horas_planificadas/limite/fecha van como string: el JSONEncoder de DRF
+    # convertiría el Decimal a float, y acá queremos el mismo formato con el
+    # que ya viaja estimated_hours en el resto de la API.
+    return {
+        "hay_conflicto": conflicto["hay_conflicto"],
+        "horas_planificadas": str(conflicto["horas_planificadas"]),
+        "limite": str(conflicto["limite"]),
+        "fecha": str(conflicto["fecha"]),
+        "mensaje": conflicto["mensaje"],
+    }
 
 
 class OrganizerMixin:
@@ -116,7 +130,10 @@ class EventListCreateView(OrganizerMixin, ListCreateAPIView):
     serializer_class = EventSerializer
 
     def get_queryset(self):
-        return Events.objects.filter(user=self.get_organizer()).order_by('-created_at')
+        # anotar_progreso evita una query de agregación por evento al serializar
+        # el campo "progress" de cada uno.
+        queryset = Events.objects.filter(user=self.get_organizer())
+        return anotar_progreso(queryset).order_by('-created_at')
 
     def perform_create(self, serializer):
         serializer.save(user=self.get_organizer())
@@ -223,6 +240,12 @@ class EventSubtaskListCreateView(OrganizerMixin, ListCreateAPIView):
         return Subtasks.objects.filter(eid=self.get_event())
 
     def perform_create(self, serializer):
+        # Evaluamos el conflicto de carga ANTES de guardar: así carga_diaria
+        # solo ve las gestiones ya existentes y sumamos horas_nuevas aparte,
+        # sin necesidad de excluir la subtarea (todavía no existe).
+        fecha = serializer.validated_data["scheduled_date"]
+        horas = serializer.validated_data["estimated_hours"]
+        self._conflicto = evaluar_conflicto(self.get_organizer(), fecha, horas)
         serializer.save(eid=self.get_event())
 
     def create(self, request, *args, **kwargs):
@@ -233,6 +256,11 @@ class EventSubtaskListCreateView(OrganizerMixin, ListCreateAPIView):
         scheduled_date = response.data.get("scheduled_date")
         if scheduled_date and str(scheduled_date) > str(event.due_date.date()):
             warnings.append("La fecha objetivo es posterior a la fecha del evento")
+
+        conflicto = getattr(self, "_conflicto", None)
+        if conflicto and conflicto["hay_conflicto"]:
+            warnings.append(conflicto["mensaje"])
+            response.data["conflicto"] = _serializar_conflicto(conflicto)
 
         if warnings:
             response.data["warnings"] = warnings
@@ -279,12 +307,36 @@ class SubtaskDetailView(OrganizerMixin, RetrieveUpdateDestroyAPIView):
 
     def perform_update(self, serializer):
         previous_status = serializer.instance.status
+        # Campos que pueden mover la carga del día: fecha, esfuerzo o el
+        # estado (solo importa si termina en pending/done, ver ESTADOS_CARGA).
+        campos_relevantes = {"scheduled_date", "estimated_hours", "status"}
+        cambia_carga = campos_relevantes & set(serializer.validated_data.keys())
+
         instance = serializer.save()
         # Only on a real transition, so a retried {"status": "done"} keeps the
         # original completion time.
         if instance.status != previous_status and "done" in (instance.status, previous_status):
             instance.executed_at = timezone.now() if instance.status == "done" else None
             instance.save(update_fields=["executed_at"])
+
+        self._conflicto = None
+        if cambia_carga and instance.status in ESTADOS_CARGA:
+            self._conflicto = evaluar_conflicto(
+                self.get_organizer(),
+                instance.scheduled_date,
+                instance.estimated_hours,
+                excluir_subtask_id=instance.pk,
+            )
+
+    def update(self, request, *args, **kwargs):
+        response = super().update(request, *args, **kwargs)
+
+        conflicto = getattr(self, "_conflicto", None)
+        if conflicto and conflicto["hay_conflicto"]:
+            response.data["warnings"] = [conflicto["mensaje"]]
+            response.data["conflicto"] = _serializar_conflicto(conflicto)
+
+        return response
 
 
 @extend_schema_view(

@@ -10,6 +10,7 @@ from django.contrib.auth.hashers import make_password
 from django.contrib.auth import password_validation
 from .models import Events, Subtasks, Users, EventType, Category
 from .exceptions import Conflict
+from .services import progreso_evento
 
 #----------------GLOBAL VALIDATION FUNCTIONS------------------
 
@@ -53,6 +54,8 @@ class EventSerializer(serializers.ModelSerializer):
         },
     )
     user = serializers.PrimaryKeyRelatedField(read_only=True)
+    # Progreso (done/total) de las gestiones del evento; ver services.progreso_evento.
+    progress = serializers.SerializerMethodField()
 
     class Meta:
         model = Events
@@ -67,8 +70,12 @@ class EventSerializer(serializers.ModelSerializer):
             "client_contact",
             "created_at",
             "updated_at",
+            "progress",
         ]
-        read_only_fields = ["eid", "user", "created_at", "updated_at"]
+        read_only_fields = ["eid", "user", "created_at", "updated_at", "progress"]
+
+    def get_progress(self, obj):
+        return progreso_evento(obj)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
