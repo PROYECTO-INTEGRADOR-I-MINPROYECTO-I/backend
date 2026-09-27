@@ -143,7 +143,10 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+# "Hoy" (endpoint /api/today/) se calcula en hora local: con UTC, pasadas
+# las 7 p.m. en Colombia ya sería el día siguiente en el servidor y el
+# resumen diario saltaría de fecha antes de tiempo.
+TIME_ZONE = 'America/Bogota'
 
 USE_I18N = True
 

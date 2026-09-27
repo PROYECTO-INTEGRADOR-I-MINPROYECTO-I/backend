@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.conf import settings
 from django.db import IntegrityError, connection, transaction
 from django.db.models import Q
@@ -11,7 +13,9 @@ from rest_framework.generics import (
     RetrieveUpdateDestroyAPIView,
     RetrieveUpdateAPIView,
 )
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from drf_spectacular.utils import (
     extend_schema,
@@ -26,11 +30,18 @@ from .exceptions import Conflict
 from .serializers import (
     EventSerializer,
     SubtaskSerializer,
+    TodaySubtaskSerializer,
     EventTypeSerializer,
     CategorySerializer,
     UserSettingsSerializer,
 )
-from .services import ESTADOS_CARGA, anotar_progreso, evaluar_conflicto
+from .services import (
+    ESTADOS_CARGA,
+    agrupar_gestiones,
+    anotar_progreso,
+    evaluar_conflicto,
+    progreso_dia,
+)
 
 
 def test(request):
@@ -72,6 +83,17 @@ def health(request):
         "environment": settings.ENVIRONMENT,
         "database": "ok",
     })
+
+
+def _serializar_progreso_dia(progreso):
+    # Mismo formato que estimated_hours (DecimalField de 2 decimales, como
+    # string): si no, el JSONEncoder de DRF convierte el Decimal a float.
+    return {
+        "completadas": progreso["completadas"],
+        "total": progreso["total"],
+        "horas_completadas": str(progreso["horas_completadas"].quantize(Decimal("0.01"))),
+        "horas_totales": str(progreso["horas_totales"].quantize(Decimal("0.01"))),
+    }
 
 
 def _serializar_conflicto(conflicto):
@@ -431,3 +453,100 @@ class UserSettingsView(RetrieveUpdateAPIView):
 
     def get_object(self):
         return self.request.user
+
+
+@extend_schema(
+    summary="Resumen del día",
+    description="""
+Agrupa las gestiones del organizador para hoy: vencidas (pendientes con
+fecha pasada), las de hoy (pendientes y completadas por separado) y las
+próximas dentro de `dias_proximos` días. Incluye también el progreso del
+día (gestiones y horas completadas vs. totales).
+    """,
+    tags=["Hoy"],
+    parameters=[
+        OpenApiParameter(
+            name="dias_proximos",
+            type=int,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            description="Ventana de días hacia adelante para 'próximas' (1 a 60, default 7).",
+        ),
+        OpenApiParameter(
+            name="metrica",
+            type=str,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            description="'gestiones' o 'horas' (default 'gestiones'). Solo cambia el campo "
+                        "'metrica' de la respuesta: ambas métricas siempre viajan en progreso_dia.",
+        ),
+    ],
+    responses={
+        200: OpenApiResponse(description="Resumen del día"),
+        400: OpenApiResponse(description="dias_proximos o metrica inválidos"),
+    },
+    examples=[
+        OpenApiExample(
+            "Respuesta de ejemplo",
+            value={
+                "fecha": "2026-09-27",
+                "metrica": "gestiones",
+                "vencidas": [],
+                "para_hoy": {"pendientes": [], "completadas": []},
+                "proximas": [],
+                "progreso_dia": {
+                    "completadas": 1,
+                    "total": 3,
+                    "horas_completadas": "2.00",
+                    "horas_totales": "6.00",
+                },
+            },
+            response_only=True,
+        )
+    ],
+)
+class TodayView(OrganizerMixin, APIView):
+    METRICAS_VALIDAS = ("gestiones", "horas")
+
+    def _dias_proximos(self, request):
+        raw = request.query_params.get("dias_proximos", "7")
+        try:
+            valor = int(raw)
+        except (TypeError, ValueError):
+            raise ValidationError("dias_proximos debe ser un entero entre 1 y 60")
+        if not 1 <= valor <= 60:
+            raise ValidationError("dias_proximos debe ser un entero entre 1 y 60")
+        return valor
+
+    def _metrica(self, request):
+        valor = request.query_params.get("metrica", "gestiones")
+        if valor not in self.METRICAS_VALIDAS:
+            raise ValidationError("metrica debe ser 'gestiones' o 'horas'")
+        return valor
+
+    def get(self, request, *args, **kwargs):
+        dias_proximos = self._dias_proximos(request)
+        metrica = self._metrica(request)
+        hoy = timezone.localdate()
+        organizador = self.get_organizer()
+
+        grupos = agrupar_gestiones(organizador, hoy, dias_proximos=dias_proximos)
+        progreso = progreso_dia(organizador, hoy)
+
+        contexto = {"organizer": organizador}
+        data = {
+            "fecha": str(hoy),
+            "metrica": metrica,
+            "vencidas": TodaySubtaskSerializer(grupos["vencidas"], many=True, context=contexto).data,
+            "para_hoy": {
+                "pendientes": TodaySubtaskSerializer(
+                    grupos["para_hoy"]["pendientes"], many=True, context=contexto
+                ).data,
+                "completadas": TodaySubtaskSerializer(
+                    grupos["para_hoy"]["completadas"], many=True, context=contexto
+                ).data,
+            },
+            "proximas": TodaySubtaskSerializer(grupos["proximas"], many=True, context=contexto).data,
+            "progreso_dia": _serializar_progreso_dia(progreso),
+        }
+        return Response(data)

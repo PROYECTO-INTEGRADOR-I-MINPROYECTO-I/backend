@@ -17,8 +17,10 @@ from .services import progreso_evento
 
 # Date Validator function
 def validate_future_date(value):
-    # Extract just the date part for comparison
-    today = timezone.now().date()
+    # localdate() y no now().date(): con TIME_ZONE en America/Bogota, usar
+    # now() en UTC corre el "hoy" del servidor varias horas respecto al del
+    # organizador (mismo bug que el de TIME_ZONE en settings).
+    today = timezone.localdate()
 
     # Handle both date and datetime instances passed to the validator
     check_date = value.date() if isinstance(value, datetime.datetime) else value
@@ -177,6 +179,14 @@ class SubtaskSerializer(serializers.ModelSerializer):
         if value <= 0:
             raise ValidationError("Las horas estimadas deben ser mayores a 0.")
         return value
+
+
+class TodaySubtaskSerializer(SubtaskSerializer):
+    # Lectura únicamente: se usa en /api/today/, no en creación/edición.
+    event_name = serializers.CharField(source="eid.name", read_only=True)
+
+    class Meta(SubtaskSerializer.Meta):
+        fields = SubtaskSerializer.Meta.fields + ["event_name"]
 
 
 class LoginSerializer(serializers.Serializer):
