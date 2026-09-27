@@ -1,3 +1,6 @@
+from decimal import Decimal
+
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
 from django.db.models.functions import Lower
@@ -10,7 +13,10 @@ class Users(models.Model):
     password_hash = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
     max_daily_hours = models.DecimalField(
-        max_digits=4, decimal_places=2, default=6.00
+        max_digits=4,
+        decimal_places=2,
+        default=6.00,
+        validators=[MinValueValidator(Decimal("1")), MaxValueValidator(Decimal("16"))],
     )
 
     class Meta:

@@ -9,6 +9,7 @@ from .views import (
     SubtaskDetailView,
     EventTypeListCreateView,
     CategoryListCreateView,
+    UserSettingsView,
 )
 from .auth_views import LoginView, LogoutView, MeView, RegisterView
 
@@ -26,4 +27,5 @@ urlpatterns = [
     path('auth/register/', RegisterView.as_view(), name='auth-register'),
     path('tipos-evento/', EventTypeListCreateView.as_view(), name='event-type-create'),
     path('categorias/', CategoryListCreateView.as_view(), name='category-create'),
+    path('user/settings/', UserSettingsView.as_view(), name='user-settings'),
     ]

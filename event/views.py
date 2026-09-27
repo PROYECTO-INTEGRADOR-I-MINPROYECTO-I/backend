@@ -9,6 +9,7 @@ from rest_framework import status
 from rest_framework.generics import (
     ListCreateAPIView,
     RetrieveUpdateDestroyAPIView,
+    RetrieveUpdateAPIView,
 )
 from rest_framework.response import Response
 
@@ -27,6 +28,7 @@ from .serializers import (
     SubtaskSerializer,
     EventTypeSerializer,
     CategorySerializer,
+    UserSettingsSerializer,
 )
 
 
@@ -345,3 +347,27 @@ class CategoryListCreateView(OrganizerMixin, ListCreateAPIView):
                 serializer.save(user=self.get_organizer())
         except IntegrityError:
             raise Conflict("Ya tienes una categoría con ese nombre")
+
+
+@extend_schema_view(
+    get=extend_schema(
+        summary="Get daily hours limit",
+        description="Returns the current organizer's daily hours limit.",
+        tags=["Usuarios"],
+    ),
+    put=extend_schema(
+        summary="Replace daily hours limit",
+        tags=["Usuarios"],
+    ),
+    patch=extend_schema(
+        summary="Update daily hours limit",
+        description="Updates the current organizer's daily hours limit (between 1 and 16).",
+        tags=["Usuarios"],
+    ),
+)
+class UserSettingsView(RetrieveUpdateAPIView):
+    serializer_class = UserSettingsSerializer
+    http_method_names = ["get", "put", "patch", "head", "options"]
+
+    def get_object(self):
+        return self.request.user
