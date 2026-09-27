@@ -17,17 +17,33 @@ class LoginSerializer(serializers.Serializer):
 
 class UserSerializer(serializers.ModelSerializer):
     name = serializers.CharField(required=True, allow_blank=False)  # No empty named user allowed
-    max_daily_hours = serializers.DecimalField(
-        max_digits=4,
-        decimal_places=2,
-        min_value=Decimal("0"),  # Prevents negative values
-    )
+    # Read-only: the daily limit changes through /api/user/settings/.
+    max_daily_hours = serializers.DecimalField(max_digits=4, decimal_places=2, read_only=True)
 
     class Meta:
         model = User
         # Does not include password_hash: this serializer backs auth
         # endpoints, and must never return the hash in the response.
         fields = ['user_id', 'name', 'email', 'max_daily_hours']
+
+
+class UserSettingsSerializer(serializers.ModelSerializer):
+    max_daily_hours = serializers.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        min_value=Decimal("1"),
+        max_value=Decimal("16"),
+        error_messages={
+            "required": "El límite debe estar entre 1 y 16 horas",
+            "min_value": "El límite debe estar entre 1 y 16 horas",
+            "max_value": "El límite debe estar entre 1 y 16 horas",
+            "invalid": "El límite debe ser un número.",
+        },
+    )
+
+    class Meta:
+        model = User
+        fields = ['max_daily_hours']
 
 
 class UserRegisterSerializer(serializers.ModelSerializer):

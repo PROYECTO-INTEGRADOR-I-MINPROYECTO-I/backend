@@ -3,14 +3,19 @@ from django.contrib.auth.hashers import check_password, make_password
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
-from rest_framework.generics import CreateAPIView
+from rest_framework.generics import CreateAPIView, RetrieveUpdateAPIView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .models import User
-from .serializers import LoginSerializer, UserRegisterSerializer, UserSerializer
+from .serializers import (
+    LoginSerializer,
+    UserRegisterSerializer,
+    UserSerializer,
+    UserSettingsSerializer,
+)
 
 # Dummy hash to compare against when the email doesn't exist: this way
 # check_password takes the same time as with a real user, and we don't leak
@@ -138,3 +143,27 @@ class RegisterView(CreateAPIView):
         request.session.cycle_key()
         request.session["user_id"] = user.user_id
         return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema_view(
+    get=extend_schema(
+        summary="Get daily hours limit",
+        description="Returns the current organizer's daily hours limit.",
+        tags=["Usuarios"],
+    ),
+    put=extend_schema(
+        summary="Replace daily hours limit",
+        tags=["Usuarios"],
+    ),
+    patch=extend_schema(
+        summary="Update daily hours limit",
+        description="Updates the current organizer's daily hours limit (between 1 and 16).",
+        tags=["Usuarios"],
+    ),
+)
+class UserSettingsView(RetrieveUpdateAPIView):
+    serializer_class = UserSettingsSerializer
+    http_method_names = ["get", "put", "patch", "head", "options"]
+
+    def get_object(self):
+        return self.request.user
