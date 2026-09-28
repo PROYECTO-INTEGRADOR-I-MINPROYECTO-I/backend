@@ -12,60 +12,13 @@ from django.db.models import Count, Q, Sum
 
 from event.models import Subtask
 
-# TEAM DECISION: a day's load counts pending and already done subtasks (the
-# time a "done" subtask took already occupied that day's availability), and
-# excludes postponed ones (they moved to another date, they don't occupy the
-# original day). This is the only place this rule lives; any load
-# calculation must go through daily_load/evaluate_overload.
-LOAD_STATUSES = ("pending", "done")
-
 # Ordering used to list subtasks: by date, then by effort and id as a stable
 # tiebreaker. Equivalent to urgency_score with event_weight=0.
 SUBTASK_ORDERING = ("scheduled_date", "estimated_hours", "subtask_id")
 
-
-def _format_hours(value):
-    # Avoids trailing zeros in messages (7.00 -> "7", 6.50 -> "6.5") without
-    # falling into scientific notation when normalizing round Decimals.
-    return format(value.normalize(), "f")
-
-
-def daily_load(organizer, date, exclude_subtask_id=None):
-    """Sum of estimated hours of the subtasks that count toward the
-    organizer's load on `date` (see LOAD_STATUSES)."""
-    qs = Subtask.objects.for_organizer(organizer).filter(
-        scheduled_date=date, status__in=LOAD_STATUSES
-    )
-    if exclude_subtask_id is not None:
-        qs = qs.exclude(pk=exclude_subtask_id)
-
-    total = qs.aggregate(total=Sum("estimated_hours"))["total"]
-    return total if total is not None else Decimal("0")
-
-
-def evaluate_overload(organizer, date, new_hours, exclude_subtask_id=None):
-    """Evaluates whether adding `new_hours` that day would exceed the
-    organizer's daily limit. Doesn't block anything: it just informs (the
-    block, if any, belongs to another story)."""
-    limit = organizer.max_daily_hours
-    load = daily_load(organizer, date, exclude_subtask_id=exclude_subtask_id)
-    total = load + new_hours
-    has_conflict = total > limit
-
-    message = None
-    if has_conflict:
-        message = (
-            f"Quedarías con {_format_hours(total)}h de gestión planificadas "
-            f"(límite {_format_hours(limit)}h)"
-        )
-
-    return {
-        "has_conflict": has_conflict,
-        "planned_hours": total,
-        "limit": limit,
-        "date": date,
-        "message": message,
-    }
+# Statuses that count toward a day's progress (pending and already done
+# subtasks); postponed ones moved to another date and don't count here.
+_PROGRESS_STATUSES = ("pending", "done")
 
 
 def urgency_score(subtask, event_weight=0):
@@ -145,7 +98,7 @@ def day_progress(organizer, today, event_id=None):
     split as "today" in group_subtasks). Never divides here; total is 0 if
     there are no subtasks that day."""
     qs = Subtask.objects.for_organizer(organizer).filter(
-        scheduled_date=today, status__in=LOAD_STATUSES
+        scheduled_date=today, status__in=_PROGRESS_STATUSES
     )
     if event_id is not None:
         qs = qs.filter(eid_id=event_id)
@@ -165,30 +118,15 @@ def day_progress(organizer, today, event_id=None):
     }
 
 
-def annotate_progress(queryset):
-    """Annotates completed/total per event on the queryset itself, so
-    event_progress doesn't fire an extra query per listed event (avoids N+1
-    in EventListCreateView)."""
-    return queryset.annotate(
-        _annotated_completed=Count("subtasks", filter=Q(subtasks__status="done")),
-        _annotated_total=Count("subtasks"),
-    )
-
-
 def event_progress(event):
     """Progress of ALL of the event's subtasks (done/total), regardless of
-    date. Uses annotate_progress's annotations if already present on the
-    object; otherwise aggregates in DB over event.subtasks."""
-    completed = getattr(event, "_annotated_completed", None)
-    total = getattr(event, "_annotated_total", None)
-
-    if completed is None or total is None:
-        aggregates = event.subtasks.aggregate(
-            completed=Count("subtask_id", filter=Q(status="done")),
-            total=Count("subtask_id"),
-        )
-        completed = aggregates["completed"] or 0
-        total = aggregates["total"] or 0
+    date. Exposed later by US-10."""
+    aggregates = event.subtasks.aggregate(
+        completed=Count("subtask_id", filter=Q(status="done")),
+        total=Count("subtask_id"),
+    )
+    completed = aggregates["completed"] or 0
+    total = aggregates["total"] or 0
 
     percentage = int(round((completed / total) * 100)) if total else 0
     return {"completed": completed, "total": total, "percentage": percentage}

@@ -122,8 +122,8 @@ class Command(BaseCommand):
             (ev1, "Proveedores", "Contratar decorador", today + datetime.timedelta(days=3), "2", "pending"),
             (ev2, "Personal/Conferencistas", "Confirmar conferencista invitado", today + datetime.timedelta(days=3), "4", "pending"),
             (ev2, "Marketing", "Diseñar piezas para redes sociales", today + datetime.timedelta(days=5), "1", "pending"),
-            # today+2 ends up loaded to exactly 6h between both events: adding
-            # 1h more there triggers the daily limit conflict (6h + 1h = 7h).
+            # today+2 ends up loaded to exactly 6h between both events: a day
+            # loaded to the limit for the overload story (US-07).
             (ev1, "Lugar", "Coordinar montaje del lugar", today + datetime.timedelta(days=2), "4", "pending"),
             (ev2, "Logística técnica", "Alquilar equipo audiovisual", today + datetime.timedelta(days=2), "2", "pending"),
         ]

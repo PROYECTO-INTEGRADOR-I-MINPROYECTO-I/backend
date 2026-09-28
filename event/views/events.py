@@ -6,8 +6,6 @@ from drf_spectacular.utils import (
 )
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 
-from planning.services import annotate_progress
-
 from ..models import Event
 from ..serializers import EventSerializer
 from .mixins import OrganizerMixin
@@ -44,10 +42,7 @@ class EventListCreateView(OrganizerMixin, ListCreateAPIView):
     serializer_class = EventSerializer
 
     def get_queryset(self):
-        # annotate_progress avoids one aggregation query per event when
-        # serializing each one's "progress" field.
-        queryset = Event.objects.filter(user=self.get_organizer())
-        return annotate_progress(queryset).order_by('-created_at')
+        return Event.objects.filter(user=self.get_organizer()).order_by('-created_at')
 
     def perform_create(self, serializer):
         serializer.save(user=self.get_organizer())
