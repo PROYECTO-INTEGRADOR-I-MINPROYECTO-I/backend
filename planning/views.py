@@ -59,7 +59,8 @@ Can be filtered by `event_id` and/or `status`.
             location=OpenApiParameter.QUERY,
             required=False,
             description="pending|done|postponed (or alias PENDING|EXECUTED|POSTPONED). Filters "
-                        "the subtask lists; 'pospuestas' only shows up with status=postponed. "
+                        "the subtask lists; 'pospuestas' only shows up with status=postponed "
+                        "and covers dates up to today + dias_proximos. "
                         "Doesn't affect the day's progress bar.",
         ),
     ],
