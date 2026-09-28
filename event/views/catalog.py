@@ -32,7 +32,7 @@ class EventTypeListCreateView(OrganizerMixin, ListCreateAPIView):
         ).order_by('name')
 
     def perform_create(self, serializer):
-        # Belt and suspenders: race between two concurrent POSTs on the unique constraint.
+        # Two concurrent POSTs can both pass validate_name.
         try:
             with transaction.atomic():
                 serializer.save(user=self.get_organizer())
@@ -62,7 +62,7 @@ class CategoryListCreateView(OrganizerMixin, ListCreateAPIView):
         ).order_by('name')
 
     def perform_create(self, serializer):
-        # Belt and suspenders: race between two concurrent POSTs on the unique constraint.
+        # Two concurrent POSTs can both pass validate_name.
         try:
             with transaction.atomic():
                 serializer.save(user=self.get_organizer())
