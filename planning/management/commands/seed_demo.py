@@ -1,9 +1,4 @@
-"""Demo data command.
-
-Creates (or recreates with --reset) a demo organizer with a couple of
-events and a handful of subtasks in different states, meant to show
-/api/today/ without loading data by hand.
-"""
+"""Seeds a demo organizer with events/subtasks so /api/hoy/ has data to show."""
 import datetime
 from decimal import Decimal
 
@@ -61,8 +56,7 @@ class Command(BaseCommand):
         if created:
             password = password or DEMO_PASSWORD
         else:
-            # An existing demo user keeps its password and its limit, unless
-            # explicitly asked to change them.
+            # Keep the existing password/limit unless explicitly asked to change them.
             if password:
                 user.password_hash = make_password(password)
             if reset:
@@ -122,8 +116,7 @@ class Command(BaseCommand):
             (ev1, "Proveedores", "Contratar decorador", today + datetime.timedelta(days=3), "2", "pending"),
             (ev2, "Personal/Conferencistas", "Confirmar conferencista invitado", today + datetime.timedelta(days=3), "4", "pending"),
             (ev2, "Marketing", "Diseñar piezas para redes sociales", today + datetime.timedelta(days=5), "1", "pending"),
-            # today+2 ends up loaded to exactly 6h between both events: a day
-            # loaded to the limit for the overload story (US-07).
+            # today+2 hits exactly 6h between both events: overload story (US-07).
             (ev1, "Lugar", "Coordinar montaje del lugar", today + datetime.timedelta(days=2), "4", "pending"),
             (ev2, "Logística técnica", "Alquilar equipo audiovisual", today + datetime.timedelta(days=2), "2", "pending"),
         ]

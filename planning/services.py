@@ -1,10 +1,4 @@
-"""Daily load and progress aggregation service.
-
-Pure functions (no request/response): they receive an organizer/objects and
-return data or querysets. This way they can be reused from different views
-(subtask creation/edit, the "today" endpoint, etc.) without duplicating the
-business rule.
-"""
+"""Pure functions for daily load/progress, shared across views."""
 from datetime import timedelta
 from decimal import Decimal
 
@@ -12,24 +6,15 @@ from django.db.models import Count, Q, Sum
 
 from event.models import Subtask
 
-# Ordering used to list subtasks: by date, then by effort and id as a stable
-# tiebreaker. Equivalent to urgency_score with event_weight=0.
+# Date, then effort, then id as a stable tiebreaker (== urgency_score(weight=0)).
 SUBTASK_ORDERING = ("scheduled_date", "estimated_hours", "subtask_id")
 
-# Statuses that count toward a day's progress (pending and already done
-# subtasks); postponed ones moved to another date and don't count here.
+# Postponed subtasks moved off this date, so they don't count toward progress.
 _PROGRESS_STATUSES = ("pending", "done")
 
 
 def urgency_score(subtask, event_weight=0):
-    """Combines estimated_hours with how close the event's due date is
-    (days between scheduled_date and eid.due_date).
-
-    event_weight is an internal parameter, not exposed in the API: with 0
-    the score is simply estimated_hours (the equivalent DB ordering is
-    SUBTASK_ORDERING); a higher weight prioritizes subtasks of events closer
-    to their deadline.
-    """
+    """estimated_hours plus a bonus for events closer to their due date (not in the API yet)."""
     weight = Decimal(event_weight)
     if weight == 0:
         return subtask.estimated_hours
@@ -41,21 +26,7 @@ def urgency_score(subtask, event_weight=0):
 
 
 def group_subtasks(organizer, today, event_id=None, days_ahead=7, status=None):
-    """Builds the subtask lists for the day summary.
-
-    - overdue: date < today and pending.
-    - today: pending and done subtasks of today, kept separate.
-    - upcoming: between today (exclusive) and today + days_ahead, pending.
-    - Postponed subtasks do NOT appear in any of the lists above (they moved
-      to another date); they only show up in "postponed", a key that's
-      always returned but only filled in when status == "postponed" (empty
-      otherwise).
-    - `status` (one of the model's values, or None) filters which lists
-      carry data and which come back empty (.none()): pending and done are
-      already split by list, so filtering by one of those two only empties
-      the opposite list (pending/done); postponed empties all the normal
-      lists and fills "postponed".
-    """
+    """Buckets subtasks into overdue/today/upcoming/postponed for the day summary."""
     base = Subtask.objects.for_organizer(organizer).select_related("eid", "category")
     if event_id is not None:
         base = base.filter(eid_id=event_id)
@@ -77,6 +48,7 @@ def group_subtasks(organizer, today, event_id=None, days_ahead=7, status=None):
     elif status == "pending":
         done_today = base.none()
     elif status == "postponed":
+        # Postponed subtasks moved off their date, so they're empty above by default.
         overdue = base.none()
         pending_today = base.none()
         done_today = base.none()
@@ -94,9 +66,7 @@ def group_subtasks(organizer, today, event_id=None, days_ahead=7, status=None):
 
 
 def day_progress(organizer, today, event_id=None):
-    """Today's progress bar: today's subtasks with status pending/done (same
-    split as "today" in group_subtasks). Never divides here; total is 0 if
-    there are no subtasks that day."""
+    """Progress bar for today: pending/done subtasks scheduled today."""
     qs = Subtask.objects.for_organizer(organizer).filter(
         scheduled_date=today, status__in=_PROGRESS_STATUSES
     )
@@ -119,8 +89,7 @@ def day_progress(organizer, today, event_id=None):
 
 
 def event_progress(event):
-    """Progress of ALL of the event's subtasks (done/total), regardless of
-    date. Exposed later by US-10."""
+    """Progress across all of the event's subtasks, any date (US-10)."""
     aggregates = event.subtasks.aggregate(
         completed=Count("subtask_id", filter=Q(status="done")),
         total=Count("subtask_id"),

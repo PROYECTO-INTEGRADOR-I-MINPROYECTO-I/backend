@@ -12,8 +12,7 @@ class TodaySubtaskSerializer(SubtaskSerializer):
 
 
 class DayProgressSerializer(serializers.Serializer):
-    # Maps day_progress's English keys (from services.py) to the Spanish
-    # keys the "progreso_dia" contract requires.
+    # English keys from services.py mapped to the Spanish contract fields.
     completadas = serializers.IntegerField(source="completed")
     total = serializers.IntegerField()
     horas_completadas = serializers.DecimalField(
