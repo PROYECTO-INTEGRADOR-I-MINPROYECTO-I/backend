@@ -244,6 +244,10 @@ if not DEBUG:
 
 
 SPECTACULAR_SETTINGS = {
+    'POSTPROCESSING_HOOKS': [
+        'drf_spectacular.hooks.postprocess_schema_enums',
+        'config.openapi.drop_negative_decimal_patterns',
+    ],
     'TITLE': 'Miniproyecto Event Management API',
     'DESCRIPTION': '''
 Welcome to the Event Management API. 

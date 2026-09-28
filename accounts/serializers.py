@@ -1,5 +1,3 @@
-from decimal import Decimal
-
 from django.contrib.auth import password_validation
 from django.contrib.auth.hashers import make_password
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -17,11 +15,8 @@ class LoginSerializer(serializers.Serializer):
 
 class UserSerializer(serializers.ModelSerializer):
     name = serializers.CharField(required=True, allow_blank=False)  # No empty named user allowed
-    max_daily_hours = serializers.DecimalField(
-        max_digits=4,
-        decimal_places=2,
-        min_value=Decimal("0"),  # Prevents negative values
-    )
+    # Read-only for now: the daily limit becomes configurable with US-12.
+    max_daily_hours = serializers.DecimalField(max_digits=4, decimal_places=2, read_only=True)
 
     class Meta:
         model = User
@@ -59,6 +54,8 @@ class UserRegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['user_id', 'email', 'name', 'max_daily_hours', 'password']
+        # New accounts start with the model default (6h); it can't be set here.
+        read_only_fields = ['user_id', 'max_daily_hours']
 
     def validate_email(self, value):
         value = value.lower()
@@ -80,6 +77,5 @@ class UserRegisterSerializer(serializers.ModelSerializer):
             name=validated_data['name'],
             email=validated_data['email'],
             password_hash=make_password(password),
-            **({'max_daily_hours': validated_data['max_daily_hours']} if 'max_daily_hours' in validated_data else {}),
         )
         return user
