@@ -1,5 +1,3 @@
-from decimal import Decimal
-
 from django.utils import timezone
 
 from drf_spectacular.utils import (
@@ -14,19 +12,8 @@ from rest_framework.views import APIView
 
 from event.views.mixins import OrganizerMixin
 
-from .serializers import TodaySubtaskSerializer
+from .serializers import DayProgressSerializer, TodaySubtaskSerializer
 from .services import day_progress, group_subtasks
-
-
-def _serialize_day_progress(progress):
-    # Same format estimated_hours already uses (2-decimal DecimalField, as a
-    # string): otherwise DRF's JSONEncoder would turn the Decimal into a float.
-    return {
-        "completed": progress["completed"],
-        "total": progress["total"],
-        "completed_hours": str(progress["completed_hours"].quantize(Decimal("0.01"))),
-        "total_hours": str(progress["total_hours"].quantize(Decimal("0.01"))),
-    }
 
 
 @extend_schema(
@@ -34,45 +21,46 @@ def _serialize_day_progress(progress):
     description="""
 Groups the organizer's subtasks for today: overdue (pending with a past
 date), today's (pending and done, kept separate) and upcoming ones within
-`days_ahead` days. Also includes the day's progress (subtasks and hours
+`dias_proximos` days. Also includes the day's progress (subtasks and hours
 completed vs. total).
     """,
     tags=["Today"],
     parameters=[
         OpenApiParameter(
-            name="days_ahead",
+            name="dias_proximos",
             type=int,
             location=OpenApiParameter.QUERY,
             required=False,
-            description="Look-ahead window for 'upcoming' (1 to 60, default 7).",
+            description="Look-ahead window for 'proximas' (1 to 60, default 7).",
         ),
         OpenApiParameter(
-            name="metric",
+            name="metrica",
             type=str,
             location=OpenApiParameter.QUERY,
             required=False,
-            description="'subtasks' or 'hours' (default 'subtasks'). Only changes the response's "
-                        "'metric' field: both metrics always travel in day_progress.",
+            description="'gestiones' or 'horas' (default 'gestiones'). Only changes the "
+                        "response's 'metrica' field: both metrics always travel in "
+                        "'progreso_dia'.",
         ),
     ],
     responses={
         200: OpenApiResponse(description="Day summary"),
-        400: OpenApiResponse(description="Invalid days_ahead or metric"),
+        400: OpenApiResponse(description="Invalid dias_proximos or metrica"),
     },
     examples=[
         OpenApiExample(
             "Example response",
             value={
-                "date": "2026-09-27",
-                "metric": "subtasks",
-                "overdue": [],
-                "today": {"pending": [], "done": []},
-                "upcoming": [],
-                "day_progress": {
-                    "completed": 1,
+                "fecha": "2026-09-27",
+                "metrica": "gestiones",
+                "vencidas": [],
+                "para_hoy": {"pendientes": [], "completadas": []},
+                "proximas": [],
+                "progreso_dia": {
+                    "completadas": 1,
                     "total": 3,
-                    "completed_hours": "2.00",
-                    "total_hours": "6.00",
+                    "horas_completadas": "2.00",
+                    "horas_totales": "6.00",
                 },
             },
             response_only=True,
@@ -80,47 +68,47 @@ completed vs. total).
     ],
 )
 class TodayView(OrganizerMixin, APIView):
-    VALID_METRICS = ("subtasks", "hours")
+    VALID_METRICS = ("gestiones", "horas")
 
-    def _days_ahead(self, request):
-        raw = request.query_params.get("days_ahead", "7")
+    def _dias_proximos(self, request):
+        raw = request.query_params.get("dias_proximos", "7")
         try:
             value = int(raw)
         except (TypeError, ValueError):
-            raise ValidationError("El rango de días debe ser un entero entre 1 y 60.")
+            raise ValidationError("dias_proximos debe ser un entero entre 1 y 60.")
         if not 1 <= value <= 60:
-            raise ValidationError("El rango de días debe ser un entero entre 1 y 60.")
+            raise ValidationError("dias_proximos debe ser un entero entre 1 y 60.")
         return value
 
-    def _metric(self, request):
-        value = request.query_params.get("metric", "subtasks")
+    def _metrica(self, request):
+        value = request.query_params.get("metrica", "gestiones")
         if value not in self.VALID_METRICS:
-            raise ValidationError("metric debe ser 'subtasks' u 'hours'.")
+            raise ValidationError("La métrica debe ser 'gestiones' u 'horas'.")
         return value
 
     def get(self, request, *args, **kwargs):
-        days_ahead = self._days_ahead(request)
-        metric = self._metric(request)
+        dias_proximos = self._dias_proximos(request)
+        metrica = self._metrica(request)
         today = timezone.localdate()
         organizer = self.get_organizer()
 
-        groups = group_subtasks(organizer, today, days_ahead=days_ahead)
+        groups = group_subtasks(organizer, today, days_ahead=dias_proximos)
         progress = day_progress(organizer, today)
 
         context = {"organizer": organizer}
         data = {
-            "date": str(today),
-            "metric": metric,
-            "overdue": TodaySubtaskSerializer(groups["overdue"], many=True, context=context).data,
-            "today": {
-                "pending": TodaySubtaskSerializer(
+            "fecha": str(today),
+            "metrica": metrica,
+            "vencidas": TodaySubtaskSerializer(groups["overdue"], many=True, context=context).data,
+            "para_hoy": {
+                "pendientes": TodaySubtaskSerializer(
                     groups["today"]["pending"], many=True, context=context
                 ).data,
-                "done": TodaySubtaskSerializer(
+                "completadas": TodaySubtaskSerializer(
                     groups["today"]["done"], many=True, context=context
                 ).data,
             },
-            "upcoming": TodaySubtaskSerializer(groups["upcoming"], many=True, context=context).data,
-            "day_progress": _serialize_day_progress(progress),
+            "proximas": TodaySubtaskSerializer(groups["upcoming"], many=True, context=context).data,
+            "progreso_dia": DayProgressSerializer(progress).data,
         }
         return Response(data)
