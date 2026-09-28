@@ -218,15 +218,6 @@ REST_FRAMEWORK = {
     'UNAUTHENTICATED_USER': None,
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'EXCEPTION_HANDLER': 'event.exceptions.custom_exception_handler',
-    'DEFAULT_THROTTLE_RATES': {
-        # Throttles brute-force attempts against login. The counter lives in
-        # the in-memory cache (per process): with several gunicorn workers
-        # each one keeps its own count.
-        'login': env('LOGIN_THROTTLE_RATE', default='5/min'),
-    },
-    # Proxies in front of the app (Render). With None DRF takes the IP from
-    # the first value of X-Forwarded-For, which the client can spoof.
-    'NUM_PROXIES': env.int('NUM_PROXIES', default=None),
 }
 
 

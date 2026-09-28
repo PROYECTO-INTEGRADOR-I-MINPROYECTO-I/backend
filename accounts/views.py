@@ -6,7 +6,6 @@ from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework.generics import CreateAPIView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .models import User
@@ -43,8 +42,7 @@ class SessionAuthHeaderMixin:
     summary="Log in",
     description=(
         "Authenticates the user with email and password and starts a session "
-        "cookie. A nonexistent email and a wrong password respond the same way. "
-        "Max 5 attempts per minute."
+        "cookie. A nonexistent email and a wrong password respond the same way."
     ),
     tags=["Auth"],
     request=LoginSerializer,
@@ -52,14 +50,11 @@ class SessionAuthHeaderMixin:
         200: UserSerializer,
         400: OpenApiResponse(description="Missing email or password"),
         401: OpenApiResponse(description="Invalid credentials"),
-        429: OpenApiResponse(description="Too many attempts"),
     },
 )
 class LoginView(SessionAuthHeaderMixin, APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "login"
 
     def post(self, request):
         email = request.data.get("email")
