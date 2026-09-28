@@ -10,16 +10,7 @@ def test(request):
 
 
 def health(request):
-    """Service health check.
-
-    Render hits this endpoint to decide whether the deploy is healthy and to
-    keep watching the service afterwards. A plain 200 isn't enough: if the
-    app is alive but can't reach the database, it can't serve anything
-    useful, so we also check the connection.
-
-    Returns 200 if everything responds and 503 if the database doesn't
-    answer, which is what Render treats as the service being down.
-    """
+    """Render's health check; 503 if the DB is unreachable, not just alive."""
     try:
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
@@ -30,8 +21,7 @@ def health(request):
                 "status": "unhealthy",
                 "environment": settings.ENVIRONMENT,
                 "database": "error",
-                # Detail only in dev: in qa/prod it would leak infrastructure
-                # data (host, user) on a public endpoint.
+                # Detail only in dev: don't leak infra info on a public endpoint.
                 "detail": str(exc) if settings.DEBUG else None,
             },
             status=503,

@@ -26,8 +26,7 @@ environ.Env.read_env(BASE_DIR / ".env")
 ENVIRONMENT = env("ENVIRONMENT", default="dev")
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# In dev an insecure default is allowed so the app can start without a .env.
-# In qa/prod SECRET_KEY is mandatory; if missing the app must fail to boot.
+# Dev falls back to an insecure default; qa/prod require SECRET_KEY set.
 SECRET_KEY = env(
     "SECRET_KEY",
     default="django-insecure-8_(7@2lv%as@*uldp$0n1z=u%wzp=2@!039ka43a^op-nc_p4a"
@@ -97,14 +96,10 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
-# If DATABASE_URL is present we use Postgres (Render provides it).
-# Otherwise we fall back to SQLite so the project can start without a .env.
+# Postgres via DATABASE_URL when set (Render), otherwise SQLite.
 if env("DATABASE_URL", default=None):
-    # Supabase's pooler exposes two ports with different behavior:
-    #   5432 -> session pooler: supports persistent connections (what we want).
-    #   6543 -> transaction pooler: recycles the connection between transactions,
-    #           so it doesn't support conn_max_age or prepared statements.
-    # We detect the port so nothing breaks if someone pastes the 6543 URL.
+    # Supabase's transaction pooler (port 6543) doesn't support conn_max_age
+    # or prepared statements, unlike the session pooler (5432).
     _db = dj_database_url.config(conn_max_age=600, ssl_require=True)
 
     if str(_db.get("PORT")) == "6543":
@@ -161,9 +156,7 @@ STATIC_URL = 'static/'
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-# In dev emails are printed to the console. In qa/prod they're sent via SMTP
-# with credentials taken from the environment; if EMAIL_HOST isn't set, the
-# dummy backend is used so the app doesn't fail to boot (emails are discarded).
+# Console backend in dev; SMTP in qa/prod if EMAIL_HOST is set, dummy otherwise.
 if ENVIRONMENT == "dev":
     MAILERS = {
         "default": {
@@ -194,17 +187,14 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="no-reply@planificapp.loc
 
 
 # CORS / CSRF
-# The backend is consumed by the frontend on another domain, so the allowed
-# origins are configured explicitly per environment.
-# NEVER use CORS_ALLOW_ALL_ORIGINS: each environment must declare its origins.
+# Frontend lives on another domain; never use CORS_ALLOW_ALL_ORIGINS.
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 CORS_ALLOW_CREDENTIALS = True
 
 
 # Django REST Framework
-# The browsable API renderer is only enabled in DEBUG, so it's not exposed
-# in qa/prod.
+# Browsable API only in DEBUG, not exposed in qa/prod.
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
@@ -220,24 +210,17 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SECURE_SSL_REDIRECT = True
 
-    # Render's health check can arrive without the X-Forwarded-Proto header.
-    # If that happens, the redirect to https returns a 301 and Render marks
-    # the deploy as failed even though the service is healthy. We exempt
-    # that route from the redirect.
+    # Exempt health check: it can hit us without X-Forwarded-Proto, and the
+    # https redirect would make Render think the deploy failed.
     SECURE_REDIRECT_EXEMPT = [r"^api/health/$"]
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 
-    # The frontend lives on another domain (planificapp-web-*.onrender.com) and
-    # calls the API with credentials: "include". With the default "Lax" value
-    # the browser does NOT attach the session cookie on cross-site fetch
-    # requests, so authentication wouldn't work. "None" requires Secure
-    # cookies, which are already enabled above.
+    # "Lax" would drop the session cookie on cross-site fetch from the frontend.
     SESSION_COOKIE_SAMESITE = "None"
     CSRF_COOKIE_SAMESITE = "None"
 
-    # HSTS only in prod: in qa we'd rather be able to revert to HTTP without
-    # waiting for the header to expire in users' browsers.
+    # HSTS only in prod: in qa we want to be able to revert to HTTP fast.
     if ENVIRONMENT == "prod":
         SECURE_HSTS_SECONDS = 31536000
         SECURE_HSTS_INCLUDE_SUBDOMAINS = True

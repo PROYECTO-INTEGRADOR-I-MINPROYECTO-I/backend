@@ -20,7 +20,6 @@ urlpatterns = [
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]
 
-# Django admin is only registered locally (DEBUG on);
-# the deployed backend is API-only.
+# Admin only locally; deployed backend is API-only.
 if settings.DEBUG:
     urlpatterns.append(path("admin/", admin.site.urls))

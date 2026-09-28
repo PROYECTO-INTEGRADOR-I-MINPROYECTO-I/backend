@@ -140,8 +140,7 @@ class SubtaskDetailView(OrganizerMixin, RetrieveUpdateDestroyAPIView):
     def perform_update(self, serializer):
         previous_status = serializer.instance.status
         instance = serializer.save()
-        # Only on a real transition, so a retried {"status": "done"} keeps the
-        # original completion time.
+        # Only stamp on a real transition, so retrying "done" keeps the original time.
         if instance.status != previous_status and "done" in (instance.status, previous_status):
             instance.executed_at = timezone.now() if instance.status == "done" else None
             instance.save(update_fields=["executed_at"])

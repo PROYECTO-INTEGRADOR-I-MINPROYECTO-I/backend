@@ -1,9 +1,7 @@
 import django.db.models.deletion
 from django.db import migrations, models
 
-# Content types keyed by the old (app_label, model) pairs. Django only renames
-# them automatically for top-level RenameModel operations, and ours live inside
-# SeparateDatabaseAndState, so we move them by hand to keep their permissions.
+# Django doesn't rename content types for nested RenameModel, so do it here.
 RENAMED_CONTENT_TYPES = [
     (("event", "users"), ("accounts", "user")),
     (("event", "events"), ("event", "event")),

@@ -8,12 +8,10 @@ from rest_framework.exceptions import ValidationError
 from ..models import Event, EventType
 
 
-# Date validator function
 def validate_future_date(value):
-    # Extract just the date part for comparison
     today = timezone.now().date()
 
-    # Handle both date and datetime instances passed to the validator
+    # value can be a date or a datetime; only the date part matters here.
     check_date = value.date() if isinstance(value, datetime.datetime) else value
 
     if check_date < today:
@@ -21,7 +19,6 @@ def validate_future_date(value):
     return value
 
 
-# Event model serializer for parsing requests
 class EventSerializer(serializers.ModelSerializer):
     name = serializers.CharField(
         required=True,

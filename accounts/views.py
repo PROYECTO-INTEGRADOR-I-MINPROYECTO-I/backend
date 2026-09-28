@@ -25,12 +25,7 @@ class CurrentUserView(OrganizerMixin, RetrieveUpdateAPIView):
     permission_classes = [AllowAny]  # No login yet (PIM1-91): a single demo organizer.
 
     def get_object(self):
-        # This method used to have its own get_or_create(email="demo@example.com"),
-        # which created a second organizer different from the one used by
-        # EventListCreateView/EventSubtaskListCreateView/etc. (get_current_organizer,
-        # "demo@planificapp.com" in organizer.py). Unified into a single source of
-        # truth: what /api/yo/ returns is always the same organizer that owns the
-        # events and subtasks created.
+        # Same organizer as everywhere else, not a separate get_or_create.
         return self.get_organizer()
 
 

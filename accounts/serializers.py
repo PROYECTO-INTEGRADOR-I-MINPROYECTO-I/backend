@@ -14,8 +14,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        # Does not include password_hash: this serializer backs
-        # GET/PATCH /api/yo/, and must never return the hash in the response.
+        # No password_hash here: this is what GET/PATCH /api/yo/ returns.
         fields = ['user_id', 'name', 'email', 'max_daily_hours']
 
 
