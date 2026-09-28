@@ -11,7 +11,7 @@ from rest_framework.views import APIView
 from .models import User
 from .serializers import LoginSerializer, UserRegisterSerializer, UserSerializer
 
-# Same cost as a real login so the response time doesn't leak the email.
+# Hash to check against when the email doesn't exist.
 _DUMMY_PASSWORD_HASH = None
 
 
@@ -64,7 +64,7 @@ class LoginView(SessionAuthHeaderMixin, APIView):
 
         user = User.objects.filter(email__iexact=email).first()
         if user is None:
-            # Same cost as a valid login, so we don't leak whether the email exists.
+            # Same cost as a real login: timing doesn't leak the email.
             check_password(password, _dummy_hash())
             raise InvalidCredentials()
 

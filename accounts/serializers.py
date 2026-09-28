@@ -8,7 +8,7 @@ from .models import User
 
 
 class LoginSerializer(serializers.Serializer):
-    # Only documents the login body in Swagger; the actual validation lives in the view.
+    # Swagger only; the view validates.
     email = serializers.EmailField()
     password = serializers.CharField(style={'input_type': 'password'})
 
@@ -28,20 +28,24 @@ class UserRegisterSerializer(serializers.ModelSerializer):
     name = serializers.CharField(
         required=True,
         allow_blank=False,
+        max_length=100,
         error_messages={
             "blank": "Escribe tu nombre.",
             "required": "Escribe tu nombre.",
+            "max_length": "El nombre no puede superar los 100 caracteres.",
         },
     )
     email = serializers.EmailField(
         required=True,
+        max_length=150,
         error_messages={
             "required": "Escribe tu correo.",
             "invalid": "El correo no es válido.",
+            "max_length": "El correo no puede superar los 150 caracteres.",
         },
     )
     password = serializers.CharField(
-        write_only=True,          # <--- NEVER returned in JSON response!
+        write_only=True,
         required=True,
         min_length=8,
         style={'input_type': 'password'},
