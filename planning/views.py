@@ -128,8 +128,7 @@ class TodayView(OrganizerMixin, APIView):
             event_id = int(raw)
         except (TypeError, ValueError):
             raise ValidationError("event_id debe ser un número entero.")
-        # 404 both when it doesn't exist and when it belongs to another
-        # organizer: we don't leak the existence of someone else's events.
+        # 404, not 403: don't reveal that another organizer's event exists.
         event = get_object_or_404(Event, eid=event_id, user=organizer)
         return event.eid
 
@@ -144,8 +143,7 @@ class TodayView(OrganizerMixin, APIView):
         groups = group_subtasks(
             organizer, today, event_id=event_id, days_ahead=dias_proximos, status=status_filter
         )
-        # The day's progress bar isn't filtered by status: it's the
-        # pending/done split of today, not a filterable list.
+        # Progress bar ignores status_filter; it's always pending/done for today.
         progress = day_progress(organizer, today, event_id=event_id)
 
         context = {"organizer": organizer}
