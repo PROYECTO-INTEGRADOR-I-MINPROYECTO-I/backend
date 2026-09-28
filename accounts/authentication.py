@@ -4,12 +4,7 @@ from .models import User
 
 
 class OrganizerSessionAuthentication(BaseAuthentication):
-    """Authenticates by reading the user_id stored in the session (cookie login).
-
-    Doesn't use django.contrib.auth: User is our own model, so instead of
-    AnonymousUser we return None when there's no valid session, and let the
-    permission (IsOrganizer) decide whether that's enough to block the request.
-    """
+    """Session-based auth over our own User model (not django.contrib.auth)."""
 
     def authenticate(self, request):
         user_id = request._request.session.get("user_id")

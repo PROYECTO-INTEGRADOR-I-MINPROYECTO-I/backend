@@ -12,6 +12,5 @@ class IsOrganizer(BasePermission):
     def has_permission(self, request, view):
         if isinstance(request.user, User):
             return True
-        # Same message whether there's no session or auth failed, so we
-        # don't give hints about the exact reason it didn't pass.
+        # Same message for no session or bad auth: don't hint why it failed.
         raise NotAuthenticated(self.message)

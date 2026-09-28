@@ -2,8 +2,7 @@ from drf_spectacular.extensions import OpenApiAuthenticationExtension
 
 
 class OrganizerSessionScheme(OpenApiAuthenticationExtension):
-    # Tells Swagger the API authenticates with the session cookie.
-    # After logging in from /api/docs/ the browser already sends the cookie.
+    # Documents the session cookie auth for Swagger / /api/docs/.
     target_class = "accounts.authentication.OrganizerSessionAuthentication"
     name = "sessionCookie"
 

@@ -1,7 +1,5 @@
 def drop_negative_decimal_patterns(result, generator, request, public):
-    """drf-spectacular gives every decimal a pattern that allows a leading
-    minus sign, so Swagger UI makes up negative examples. No decimal in this
-    API can be negative (hours, limits), so we drop that part of the pattern."""
+    """Strip the leading minus from decimal patterns: none of ours go negative."""
     for schema in result.get("components", {}).get("schemas", {}).values():
         for prop in schema.get("properties", {}).values():
             pattern = prop.get("pattern")

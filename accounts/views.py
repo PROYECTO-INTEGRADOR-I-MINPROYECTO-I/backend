@@ -11,9 +11,7 @@ from rest_framework.views import APIView
 from .models import User
 from .serializers import LoginSerializer, UserRegisterSerializer, UserSerializer
 
-# Dummy hash to compare against when the email doesn't exist: this way
-# check_password takes the same time as with a real user, and we don't leak
-# through response time whether the email is registered.
+# Same cost as a real login so the response time doesn't leak the email.
 _DUMMY_PASSWORD_HASH = None
 
 
@@ -31,8 +29,7 @@ class InvalidCredentials(AuthenticationFailed):
 
 
 class SessionAuthHeaderMixin:
-    """Without this DRF turns AuthenticationFailed 401s into 403s,
-    because it thinks there's no auth scheme available."""
+    """Without this, DRF turns AuthenticationFailed 401s into 403s."""
 
     def get_authenticate_header(self, request):
         return "Session"

@@ -78,8 +78,7 @@ class Event(models.Model):
 
 class SubtaskQuerySet(models.QuerySet):
     def for_organizer(self, user):
-        # Subtask has no direct FK to User: the owner is resolved through
-        # the event (eid__user).
+        # No direct FK to User; owner comes from the parent event.
         return self.filter(eid__user=user)
 
 
