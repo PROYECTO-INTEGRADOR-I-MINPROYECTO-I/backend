@@ -23,8 +23,9 @@ from .services import day_progress, group_subtasks
     description="""
 Groups the organizer's subtasks for today: overdue (pending with a past
 date), today's (pending and done, kept separate) and upcoming ones within
-`dias_proximos` days. Also includes the day's progress (subtasks and hours
-completed vs. total). Can be filtered by `event_id` and/or `status`.
+`dias_proximos` days. `completadas` also includes anything marked done today,
+whatever its date. `progreso_dia` only counts subtasks scheduled for today.
+Can be filtered by `event_id` and/or `status`.
     """,
     tags=["Today"],
     parameters=[
