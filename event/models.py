@@ -2,27 +2,15 @@ from django.db import models
 from django.db.models import Q
 from django.db.models.functions import Lower
 
-
-class Users(models.Model):
-    user_id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=100)
-    email = models.CharField(unique=True, max_length=150)
-    password_hash = models.CharField(max_length=255)
-    created_at = models.DateTimeField(auto_now_add=True)
-    max_daily_hours = models.DecimalField(
-        max_digits=4, decimal_places=2, default=6.00
-    )
-
-    class Meta:
-        db_table = 'users'
+from accounts.models import User
 
 
 class EventType(models.Model):
     event_type_id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100)
-    # user = None -> tipo predefinido, disponible para todos los organizadores.
+    # user = None -> predefined type, available to every organizer.
     user = models.ForeignKey(
-        Users, models.CASCADE, null=True, blank=True, related_name='event_types'
+        User, models.CASCADE, null=True, blank=True, related_name='event_types'
     )
 
     class Meta:
@@ -43,9 +31,9 @@ class EventType(models.Model):
 class Category(models.Model):
     category_id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100)
-    # user = None -> categoría predefinida, disponible para todos los organizadores.
+    # user = None -> predefined category, available to every organizer.
     user = models.ForeignKey(
-        Users, models.CASCADE, null=True, blank=True, related_name='categories'
+        User, models.CASCADE, null=True, blank=True, related_name='categories'
     )
 
     class Meta:
@@ -63,9 +51,9 @@ class Category(models.Model):
         return self.name
 
 
-class Events(models.Model):
+class Event(models.Model):
     eid = models.AutoField(primary_key=True)
-    user = models.ForeignKey(Users, models.CASCADE)
+    user = models.ForeignKey(User, models.CASCADE)
     name = models.CharField(max_length=150)
     description = models.TextField(blank=True, null=True)
     due_date = models.DateTimeField()
@@ -88,7 +76,7 @@ class Events(models.Model):
         return self.name
 
 
-class Subtasks(models.Model):
+class Subtask(models.Model):
     STATUS_CHOICES = [
         ('pending', 'pending'),
         ('done', 'done'),
@@ -96,7 +84,7 @@ class Subtasks(models.Model):
     ]
 
     subtask_id = models.AutoField(primary_key=True)
-    eid = models.ForeignKey('Events', models.CASCADE, db_column='eid', related_name='subtasks')
+    eid = models.ForeignKey('Event', models.CASCADE, db_column='eid', related_name='subtasks')
     title = models.CharField(max_length=150)
     description = models.TextField(blank=True, null=True)
     category = models.ForeignKey(Category, models.PROTECT, related_name='subtasks')

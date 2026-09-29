@@ -9,6 +9,7 @@ from drf_spectacular.views import (
 
 urlpatterns = [
     path("api/", include("event.urls")),
+    path("api/", include("accounts.urls")),
     # OpenAPI 3 Schema generation
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     
@@ -19,7 +20,6 @@ urlpatterns = [
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]
 
-# El admin de Django solo se registra en local (DEBUG activo);
-# el backend desplegado es API-only.
+# Admin only locally; deployed backend is API-only.
 if settings.DEBUG:
     urlpatterns.append(path("admin/", admin.site.urls))
