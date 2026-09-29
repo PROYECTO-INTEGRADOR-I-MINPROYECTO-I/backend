@@ -23,9 +23,11 @@ class EventSerializer(serializers.ModelSerializer):
     name = serializers.CharField(
         required=True,
         allow_blank=False,
+        max_length=150,
         error_messages={
             "blank": "Escribe el nombre del evento.",
             "required": "Escribe el nombre del evento.",
+            "max_length": "El nombre del evento no puede superar los 150 caracteres.",
         },
     )
     due_date = serializers.DateTimeField(

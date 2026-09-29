@@ -83,7 +83,9 @@ class EventSubtaskListCreateView(OrganizerMixin, ListCreateAPIView):
         return Subtask.objects.filter(eid=self.get_event())
 
     def perform_create(self, serializer):
-        serializer.save(eid=self.get_event())
+        # Created already done: stamp it like a PATCH to "done" would.
+        done = serializer.validated_data.get("status") == "done"
+        serializer.save(eid=self.get_event(), executed_at=timezone.now() if done else None)
 
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
