@@ -35,7 +35,10 @@ def group_subtasks(organizer, today, event_id=None, days_ahead=7, status=None):
 
     overdue = base.filter(scheduled_date__lt=today, status="pending").order_by(*SUBTASK_ORDERING)
     pending_today = base.filter(scheduled_date=today, status="pending").order_by(*SUBTASK_ORDERING)
-    done_today = base.filter(scheduled_date=today, status="done").order_by(*SUBTASK_ORDERING)
+    # Anything finished today shows up, even if it was overdue or upcoming.
+    done_today = base.filter(status="done").filter(
+        Q(scheduled_date=today) | Q(executed_at__date=today)
+    ).order_by(*SUBTASK_ORDERING)
     upcoming = base.filter(
         scheduled_date__gt=today, scheduled_date__lte=upcoming_limit, status="pending"
     ).order_by(*SUBTASK_ORDERING)
