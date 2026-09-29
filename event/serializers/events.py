@@ -1,4 +1,5 @@
 import datetime
+import re
 
 from django.db.models import Q
 from django.utils import timezone
@@ -6,6 +7,8 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
 from ..models import Event, EventType
+
+HEX_COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
 def validate_future_date(value):
@@ -48,6 +51,19 @@ class EventSerializer(serializers.ModelSerializer):
         },
     )
     user = serializers.PrimaryKeyRelatedField(read_only=True)
+    cover_kind = serializers.ChoiceField(
+        choices=Event.COVER_KIND_CHOICES,
+        allow_null=True,
+        required=False,
+        error_messages={"invalid_choice": "El tipo de portada no es válido."},
+    )
+    cover_value = serializers.CharField(
+        allow_null=True,
+        allow_blank=True,
+        required=False,
+        max_length=500,
+        error_messages={"max_length": "El valor de la portada no puede superar los 500 caracteres."},
+    )
 
     class Meta:
         model = Event
@@ -60,6 +76,8 @@ class EventSerializer(serializers.ModelSerializer):
             "event_type",
             "place",
             "client_contact",
+            "cover_kind",
+            "cover_value",
             "created_at",
             "updated_at",
         ]
@@ -77,3 +95,33 @@ class EventSerializer(serializers.ModelSerializer):
         if not value.strip():
             raise ValidationError("Escribe el nombre del evento.")
         return value
+
+    def validate(self, attrs):
+        # En un PATCH parcial, attrs solo trae los campos que llegaron en el
+        # body; para validar la pareja completa hay que completar con lo que
+        # ya tiene la instancia cuando no se está enviando ese campo.
+        if self.instance is not None:
+            kind = attrs.get("cover_kind", self.instance.cover_kind)
+            value = attrs.get("cover_value", self.instance.cover_value)
+        else:
+            kind = attrs.get("cover_kind")
+            value = attrs.get("cover_value")
+
+        value = value or None  # "" cuenta como "sin portada", igual que None.
+
+        if bool(kind) != bool(value):
+            raise ValidationError(
+                {"cover_value": "cover_kind y cover_value deben ir juntos, o ninguno de los dos."}
+            )
+
+        if kind == "color" and value and not HEX_COLOR_PATTERN.match(value):
+            raise ValidationError({"cover_value": "El color debe ser un hexadecimal válido, por ejemplo #8b1a1a."})
+
+        # Normaliza "" a None y guarda el valor ya completado (para que un
+        # PATCH que solo manda uno de los dos campos no deje el otro con un
+        # valor viejo inconsistente).
+        if "cover_kind" in attrs or "cover_value" in attrs:
+            attrs["cover_kind"] = kind
+            attrs["cover_value"] = value
+
+        return attrs
