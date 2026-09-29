@@ -52,6 +52,17 @@ class Category(models.Model):
 
 
 class Event(models.Model):
+    # PIM1-120: portada personalizada de la vista "Eventos" (PIM1-111) — un
+    # color sólido de una paleta fija en frontend, o un enlace a imagen.
+    # cover_value guarda uno u otro según cover_kind, por eso es un CharField
+    # simple y no un URLField (tiene que aceptar ambos formatos). Ambos
+    # opcionales: un evento sin portada elegida sigue usando el color
+    # determinístico por nombre que ya calcula el frontend.
+    COVER_KIND_CHOICES = [
+        ('color', 'color'),
+        ('image', 'image'),
+    ]
+
     eid = models.AutoField(primary_key=True)
     user = models.ForeignKey(User, models.CASCADE)
     name = models.CharField(max_length=150)
@@ -62,6 +73,10 @@ class Event(models.Model):
     )
     place = models.CharField(max_length=255, blank=True, null=True)
     client_contact = models.CharField(max_length=255, blank=True, null=True)
+    cover_kind = models.CharField(
+        max_length=10, choices=COVER_KIND_CHOICES, blank=True, null=True
+    )
+    cover_value = models.CharField(max_length=500, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
