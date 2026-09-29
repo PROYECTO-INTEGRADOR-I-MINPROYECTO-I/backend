@@ -10,6 +10,7 @@ from drf_spectacular.views import (
 urlpatterns = [
     path("api/", include("event.urls")),
     path("api/", include("accounts.urls")),
+    path("api/", include("planning.urls")),
     # OpenAPI 3 Schema generation
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     

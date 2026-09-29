@@ -29,6 +29,17 @@ El admin queda en http://localhost:8000/admin/ (solo local). Para entrar, crear 
 
 Si no existe `.env`, el proyecto arranca igual usando SQLite, para que un clon recién bajado no quede bloqueado.
 
+Para tener datos de prueba sin cargarlos a mano (organizador, eventos y gestiones en distintos estados), correr:
+
+```bash
+python manage.py seed_demo            # crea el organizador demo@planificapp.com (password demo1234)
+python manage.py seed_demo --reset    # borra sus eventos y los recrea desde cero
+python manage.py seed_demo --password otra-clave   # cambia la contraseña del demo
+# En prod se niega a correr salvo con --force.
+```
+
+Es idempotente: si ya existen eventos del demo, no los duplica (avisa por consola) salvo que se use `--reset`.
+
 ---
 
 ## 2. Variables de entorno

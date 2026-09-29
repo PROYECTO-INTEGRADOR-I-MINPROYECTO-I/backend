@@ -9,7 +9,8 @@ from ..models import Event, EventType
 
 
 def validate_future_date(value):
-    today = timezone.now().date()
+    # localdate(), not now().date(): keeps "today" in America/Bogota, not UTC.
+    today = timezone.localdate()
 
     # value can be a date or a datetime; only the date part matters here.
     check_date = value.date() if isinstance(value, datetime.datetime) else value

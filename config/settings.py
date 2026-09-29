@@ -140,7 +140,8 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+# Local time so "today" (/api/hoy/) doesn't roll over early relative to UTC.
+TIME_ZONE = 'America/Bogota'
 
 USE_I18N = True
 

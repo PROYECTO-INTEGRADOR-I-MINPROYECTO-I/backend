@@ -80,7 +80,7 @@ class EventSubtaskListCreateView(OrganizerMixin, ListCreateAPIView):
         return self._event
 
     def get_queryset(self):
-        return Subtask.objects.filter(eid=self.get_event())
+        return Subtask.objects.filter(eid=self.get_event()).select_related("category")
 
     def perform_create(self, serializer):
         # Created already done: stamp it like a PATCH to "done" would.
