@@ -76,12 +76,20 @@ class Event(models.Model):
         return self.name
 
 
+class SubtaskQuerySet(models.QuerySet):
+    def for_organizer(self, user):
+        # No direct FK to User; owner comes from the parent event.
+        return self.filter(eid__user=user)
+
+
 class Subtask(models.Model):
     STATUS_CHOICES = [
         ('pending', 'pending'),
         ('done', 'done'),
         ('postponed', 'postponed'),
     ]
+
+    objects = SubtaskQuerySet.as_manager()
 
     subtask_id = models.AutoField(primary_key=True)
     eid = models.ForeignKey('Event', models.CASCADE, db_column='eid', related_name='subtasks')

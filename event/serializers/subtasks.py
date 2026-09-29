@@ -9,9 +9,11 @@ class SubtaskSerializer(serializers.ModelSerializer):
     title = serializers.CharField(
         required=True,
         allow_blank=False,
+        max_length=150,
         error_messages={
             "blank": "Escribe el nombre de la gestión.",
             "required": "Escribe el nombre de la gestión.",
+            "max_length": "El nombre de la gestión no puede superar los 150 caracteres.",
         },
     )
     category = serializers.SlugRelatedField(

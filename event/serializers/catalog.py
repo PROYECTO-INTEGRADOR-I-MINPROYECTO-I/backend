@@ -8,7 +8,12 @@ from ..models import Category, EventType
 
 class EventTypeSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source="event_type_id", read_only=True)
-    name = serializers.CharField(required=True, allow_blank=True)
+    name = serializers.CharField(
+        required=True,
+        allow_blank=True,
+        max_length=100,
+        error_messages={"max_length": "El nombre no puede superar los 100 caracteres."},
+    )
 
     class Meta:
         model = EventType
@@ -30,7 +35,12 @@ class EventTypeSerializer(serializers.ModelSerializer):
 
 class CategorySerializer(serializers.ModelSerializer):
     id = serializers.CharField(source="name", read_only=True)
-    name = serializers.CharField(required=True, allow_blank=True)
+    name = serializers.CharField(
+        required=True,
+        allow_blank=True,
+        max_length=100,
+        error_messages={"max_length": "El nombre no puede superar los 100 caracteres."},
+    )
 
     class Meta:
         model = Category

@@ -14,7 +14,7 @@ from .mixins import OrganizerMixin
 @extend_schema_view(
     get=extend_schema(
         summary="List all events",
-        description="Returns list of all created events",
+        description="Returns the events owned by the current organizer.",
         tags=["Eventos"],
     ),
     post=extend_schema(

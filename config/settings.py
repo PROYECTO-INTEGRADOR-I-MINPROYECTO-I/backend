@@ -200,6 +200,18 @@ REST_FRAMEWORK = {
         "rest_framework.renderers.JSONRenderer",
     ]
     + (["rest_framework.renderers.BrowsableAPIRenderer"] if DEBUG else []),
+    # JSON only: form/multipart bodies could slip past CORS/CSRF cross-origin.
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'accounts.authentication.OrganizerSessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'accounts.permissions.IsOrganizer',
+    ],
+    # No contrib.auth AnonymousUser here: request.user is just None.
+    'UNAUTHENTICATED_USER': None,
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'EXCEPTION_HANDLER': 'event.exceptions.custom_exception_handler',
 }
@@ -228,6 +240,10 @@ if not DEBUG:
 
 
 SPECTACULAR_SETTINGS = {
+    'POSTPROCESSING_HOOKS': [
+        'drf_spectacular.hooks.postprocess_schema_enums',
+        'config.openapi.drop_negative_decimal_patterns',
+    ],
     'TITLE': 'Miniproyecto Event Management API',
     'DESCRIPTION': '''
 Welcome to the Event Management API. 
@@ -245,4 +261,7 @@ Welcome to the Event Management API.
         'defaultModelsExpandDepth': 2,
         'defaultModelExpandDepth': 2,
     },
+    # Docs/schema stay open even though the rest of the API requires login.
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.AllowAny'],
+    'SERVE_AUTHENTICATION': [],
 }
