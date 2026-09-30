@@ -24,6 +24,12 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['user_id', 'name', 'email', 'max_daily_hours']
 
 
+class AuthTokenSerializer(serializers.Serializer):
+    # Swagger only: shape of the login / register / refresh response.
+    user = UserSerializer()
+    access = serializers.CharField()
+
+
 class UserRegisterSerializer(serializers.ModelSerializer):
     name = serializers.CharField(
         required=True,
