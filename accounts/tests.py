@@ -6,6 +6,10 @@ from rest_framework.test import APITestCase
 
 from .models import User
 
+"""
+Test login correct implementation, fail safe and message errors with incomplete credentials on request.
+"""
+
 
 class TestAuthRegister(APITestCase):
     def setUp(self):
