@@ -29,7 +29,8 @@ class JWTAuthTests(APITestCase):
 
     def bearer(self, access):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
-        def test_login_returns_access_and_httponly_refresh_cookie(self):
+
+    def test_login_returns_access_and_httponly_refresh_cookie(self):
         response = self.login()
 
         self.assertEqual(response.status_code, 200)
