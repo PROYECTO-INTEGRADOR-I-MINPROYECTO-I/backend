@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
 
 import dj_database_url
@@ -32,6 +33,13 @@ SECRET_KEY = env(
     default="django-insecure-8_(7@2lv%as@*uldp$0n1z=u%wzp=2@!039ka43a^op-nc_p4a"
     if ENVIRONMENT == "dev"
     else environ.Env.NOTSET,
+)
+
+# Key that signs the JWTs. Separate from SECRET_KEY so it can be rotated on its
+# own; dev falls back to SECRET_KEY, qa/prod require JWT_SIGNING_KEY set.
+JWT_SIGNING_KEY = env(
+    "JWT_SIGNING_KEY",
+    default=SECRET_KEY if ENVIRONMENT == "dev" else environ.Env.NOTSET,
 )
 
 # SECURITY WARNING: don't run with debug turned on in production!
@@ -206,7 +214,7 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.JSONParser',
     ],
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'accounts.authentication.OrganizerSessionAuthentication',
+        'accounts.authentication.OrganizerJWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'accounts.permissions.IsOrganizer',
@@ -216,6 +224,25 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'EXCEPTION_HANDLER': 'event.exceptions.custom_exception_handler',
 }
+
+
+# JWT auth over our own accounts.User (not django.contrib.auth). The blacklist
+# app is not installed: its tables FK to auth.User. Revocation goes through
+# User.token_version (claim "ver") instead.
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ALGORITHM": "HS256",
+    "SIGNING_KEY": JWT_SIGNING_KEY,
+    "USER_ID_FIELD": "user_id",
+    "USER_ID_CLAIM": "user_id",
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "UPDATE_LAST_LOGIN": False,
+}
+
+# Absolute cap: refresh rotation cannot keep a session alive past this many
+# days since the original login.
+JWT_MAX_SESSION_DAYS = 30
 
 
 # Extra security once DEBUG is off (qa and prod).

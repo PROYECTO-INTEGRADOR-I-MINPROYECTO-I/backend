@@ -1,10 +1,10 @@
 from drf_spectacular.extensions import OpenApiAuthenticationExtension
 
 
-class OrganizerSessionScheme(OpenApiAuthenticationExtension):
-    # Documents the session cookie auth for Swagger / /api/docs/.
-    target_class = "accounts.authentication.OrganizerSessionAuthentication"
-    name = "sessionCookie"
+class OrganizerJWTScheme(OpenApiAuthenticationExtension):
+    # Documents the Bearer JWT auth for Swagger / /api/docs/.
+    target_class = "accounts.authentication.OrganizerJWTAuthentication"
+    name = "jwtAuth"
 
     def get_security_definition(self, auto_schema):
-        return {"type": "apiKey", "in": "cookie", "name": "sessionid"}
+        return {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}
