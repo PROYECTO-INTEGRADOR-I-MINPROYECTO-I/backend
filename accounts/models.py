@@ -11,5 +11,8 @@ class User(models.Model):
         max_digits=4, decimal_places=2, default=6.00
     )
 
+    # Bumped on logout: tokens carrying an older "ver" claim stop working.
+    token_version = models.PositiveIntegerField(default=0)
+
     class Meta:
         db_table = 'users'
