@@ -22,6 +22,8 @@ services:
         value: https://planificapp-web-dev.onrender.com
       - key: SECRET_KEY
         generateValue: true
+      - key: JWT_SIGNING_KEY
+        generateValue: true
       # Sin DATABASE_URL este servicio usa SQLite en disco efímero: la base se
       # pierde en cada deploy. Suficiente mientras dev/qa se trabajen en local.
       # Para apuntarlo a Supabase, cargar aquí la cadena del session pooler.
@@ -51,6 +53,8 @@ services:
         value: https://planificapp-web-qa.onrender.com
       - key: SECRET_KEY
         generateValue: true
+      - key: JWT_SIGNING_KEY
+        generateValue: true
       # Sin DATABASE_URL este servicio usa SQLite en disco efímero: la base se
       # pierde en cada deploy. Suficiente mientras dev/qa se trabajen en local.
       # Para apuntarlo a Supabase, cargar aquí la cadena del session pooler.
@@ -79,6 +83,8 @@ services:
       - key: CSRF_TRUSTED_ORIGINS
         value: https://planificapp-web-prod.onrender.com
       - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SIGNING_KEY
         generateValue: true
       # Obligatoria: cadena del session pooler de Supabase (puerto 5432).
       # Se carga a mano en el dashboard, nunca en el repositorio.

@@ -6,3 +6,33 @@ venv/
 .venv/
 staticfiles/
 .DS_Store
+# Python & Environment
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.venv/
+env/
+ENV/
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+
+# Database & SQLite
+*.sqlite3
+*.db
+
+# Django Output & Static Files
+staticfiles/
+media/
+*.log
+
+# Pre-Commit Cache
+.cache/
+
+# Operating System Files
+.DS_Store
+Thumbs.db
