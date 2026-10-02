@@ -1,0 +1,3 @@
+# Siempre texto UTF-8 con saltos LF: un requirements.txt en UTF-16 (pip freeze
+# desde PowerShell) git lo trata como binario y los merges lo pueden vaciar.
+requirements.txt text eol=lf

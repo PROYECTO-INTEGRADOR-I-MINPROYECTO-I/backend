@@ -2,27 +2,15 @@ from django.db import models
 from django.db.models import Q
 from django.db.models.functions import Lower
 
-
-class Users(models.Model):
-    user_id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=100)
-    email = models.CharField(unique=True, max_length=150)
-    password_hash = models.CharField(max_length=255)
-    created_at = models.DateTimeField(auto_now_add=True)
-    max_daily_hours = models.DecimalField(
-        max_digits=4, decimal_places=2, default=6.00
-    )
-
-    class Meta:
-        db_table = 'users'
+from accounts.models import User
 
 
 class EventType(models.Model):
     event_type_id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100)
-    # user = None -> tipo predefinido, disponible para todos los organizadores.
+    # user = None -> predefined type, available to every organizer.
     user = models.ForeignKey(
-        Users, models.CASCADE, null=True, blank=True, related_name='event_types'
+        User, models.CASCADE, null=True, blank=True, related_name='event_types'
     )
 
     class Meta:
@@ -43,9 +31,9 @@ class EventType(models.Model):
 class Category(models.Model):
     category_id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100)
-    # user = None -> categoría predefinida, disponible para todos los organizadores.
+    # user = None -> predefined category, available to every organizer.
     user = models.ForeignKey(
-        Users, models.CASCADE, null=True, blank=True, related_name='categories'
+        User, models.CASCADE, null=True, blank=True, related_name='categories'
     )
 
     class Meta:
@@ -63,9 +51,20 @@ class Category(models.Model):
         return self.name
 
 
-class Events(models.Model):
+class Event(models.Model):
+    # PIM1-120: portada personalizada de la vista "Eventos" (PIM1-111) — un
+    # color sólido de una paleta fija en frontend, o un enlace a imagen.
+    # cover_value guarda uno u otro según cover_kind, por eso es un CharField
+    # simple y no un URLField (tiene que aceptar ambos formatos). Ambos
+    # opcionales: un evento sin portada elegida sigue usando el color
+    # determinístico por nombre que ya calcula el frontend.
+    COVER_KIND_CHOICES = [
+        ('color', 'color'),
+        ('image', 'image'),
+    ]
+
     eid = models.AutoField(primary_key=True)
-    user = models.ForeignKey(Users, models.CASCADE)
+    user = models.ForeignKey(User, models.CASCADE)
     name = models.CharField(max_length=150)
     description = models.TextField(blank=True, null=True)
     due_date = models.DateTimeField()
@@ -74,6 +73,10 @@ class Events(models.Model):
     )
     place = models.CharField(max_length=255, blank=True, null=True)
     client_contact = models.CharField(max_length=255, blank=True, null=True)
+    cover_kind = models.CharField(
+        max_length=10, choices=COVER_KIND_CHOICES, blank=True, null=True
+    )
+    cover_value = models.CharField(max_length=500, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -88,15 +91,23 @@ class Events(models.Model):
         return self.name
 
 
-class Subtasks(models.Model):
+class SubtaskQuerySet(models.QuerySet):
+    def for_organizer(self, user):
+        # No direct FK to User; owner comes from the parent event.
+        return self.filter(eid__user=user)
+
+
+class Subtask(models.Model):
     STATUS_CHOICES = [
         ('pending', 'pending'),
         ('done', 'done'),
         ('postponed', 'postponed'),
     ]
 
+    objects = SubtaskQuerySet.as_manager()
+
     subtask_id = models.AutoField(primary_key=True)
-    eid = models.ForeignKey('Events', models.CASCADE, db_column='eid', related_name='subtasks')
+    eid = models.ForeignKey('Event', models.CASCADE, db_column='eid', related_name='subtasks')
     title = models.CharField(max_length=150)
     description = models.TextField(blank=True, null=True)
     category = models.ForeignKey(Category, models.PROTECT, related_name='subtasks')

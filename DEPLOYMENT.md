@@ -29,6 +29,17 @@ El admin queda en http://localhost:8000/admin/ (solo local). Para entrar, crear 
 
 Si no existe `.env`, el proyecto arranca igual usando SQLite, para que un clon recién bajado no quede bloqueado.
 
+Para tener datos de prueba sin cargarlos a mano (organizador, eventos y gestiones en distintos estados), correr:
+
+```bash
+python manage.py seed_demo            # crea el organizador demo@planificapp.com (password demo1234)
+python manage.py seed_demo --reset    # borra sus eventos y los recrea desde cero
+python manage.py seed_demo --password otra-clave   # cambia la contraseña del demo
+# En prod se niega a correr salvo con --force.
+```
+
+Es idempotente: si ya existen eventos del demo, no los duplica (avisa por consola) salvo que se use `--reset`.
+
 ---
 
 ## 2. Variables de entorno
@@ -38,6 +49,7 @@ Si no existe `.env`, el proyecto arranca igual usando SQLite, para que un clon r
 | `ENVIRONMENT` | No | `dev`, `qa` o `prod`. Determina los defaults de las demás y activa HSTS en prod. |
 | `DEBUG` | No | `True` solo en local. **Siempre `False` en qa y prod.** |
 | `SECRET_KEY` | **Sí** | En `dev` hay un default inseguro. En qa/prod es obligatoria: si falta, la app no levanta a propósito. |
+| `JWT_SIGNING_KEY` | **Sí** | Clave que firma los JWT de acceso y refresh. En `dev` usa `SECRET_KEY` como respaldo. En qa/prod es obligatoria: si falta, la app no levanta. Rotarla invalida todas las sesiones. |
 | `ALLOWED_HOSTS` | No | Dominios que Django acepta, separados por coma. Render inyecta además `RENDER_EXTERNAL_HOSTNAME`, que se añade solo. |
 | `DATABASE_URL` | **Sí** | Cadena de conexión a Supabase. Si no está, cae a SQLite. |
 | `CORS_ALLOWED_ORIGINS` | No | Orígenes del frontend autorizados a llamar la API, con esquema y separados por coma. |
@@ -132,7 +144,7 @@ El repositorio incluye `render.yaml` con los tres servicios ya definidos.
 1. En Render: **New → Blueprint** y conectar este repositorio.
 2. Render lee `render.yaml` y propone `planificapp-api-dev`, `planificapp-api-qa` y `planificapp-api-prod`, cada uno atado a su rama.
 3. Las variables marcadas `sync: false` (`DATABASE_URL`) **no viajan en el repositorio**: hay que cargarlas a mano en cada servicio, en *Environment*.
-4. `SECRET_KEY` usa `generateValue: true`, así que Render genera una distinta por servicio. No hay que hacer nada.
+4. `SECRET_KEY` y `JWT_SIGNING_KEY` usan `generateValue: true`, así que Render genera una distinta por servicio. No hay que hacer nada.
 5. Primer deploy: Render ejecuta `./build.sh` (instala dependencias y corre migraciones) y luego arranca con gunicorn.
 
 El health check apunta a `/api/health/`.
@@ -205,4 +217,4 @@ Además, por ambiente:
 
 **Fallan las migraciones en el build** — normalmente es la `DATABASE_URL`. Revisar que se usó el puerto 5432, que la contraseña está bien y que los caracteres especiales de la contraseña van codificados para URL (`@` → `%40`, `#` → `%23`, etc.).
 
-**`ImproperlyConfigured: Set the SECRET_KEY environment variable`** — es el comportamiento buscado: en qa y prod la clave es obligatoria. Cargarla en Render.
+**`ImproperlyConfigured: Set the SECRET_KEY environment variable`** (o `JWT_SIGNING_KEY`) — es el comportamiento buscado: en qa y prod las claves son obligatorias. Cargarlas en Render.

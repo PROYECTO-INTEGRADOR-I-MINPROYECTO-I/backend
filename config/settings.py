@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
 
 import dj_database_url
@@ -18,16 +19,15 @@ import environ
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Carga de variables de entorno desde .env (si existe) y del entorno del sistema.
+# Loads environment variables from .env (if present) and from the system environment.
 env = environ.Env()
 environ.Env.read_env(BASE_DIR / ".env")
 
-# Entorno de ejecución: dev | qa | prod. Controla los defaults más abajo.
+# Runtime environment: dev | qa | prod. Controls the defaults below.
 ENVIRONMENT = env("ENVIRONMENT", default="dev")
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# En dev se permite un valor por defecto inseguro para poder arrancar sin .env.
-# En qa/prod es obligatorio definir SECRET_KEY, si falta la app no debe levantar.
+# Dev falls back to an insecure default; qa/prod require SECRET_KEY set.
 SECRET_KEY = env(
     "SECRET_KEY",
     default="django-insecure-8_(7@2lv%as@*uldp$0n1z=u%wzp=2@!039ka43a^op-nc_p4a"
@@ -35,12 +35,19 @@ SECRET_KEY = env(
     else environ.Env.NOTSET,
 )
 
+# Key that signs the JWTs. Separate from SECRET_KEY so it can be rotated on its
+# own; dev falls back to SECRET_KEY, qa/prod require JWT_SIGNING_KEY set.
+JWT_SIGNING_KEY = env(
+    "JWT_SIGNING_KEY",
+    default=SECRET_KEY if ENVIRONMENT == "dev" else environ.Env.NOTSET,
+)
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool("DEBUG", default=(ENVIRONMENT == "dev"))
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[])
 
-# Render inyecta el hostname externo del servicio en esta variable.
+# Render injects the service's external hostname in this variable.
 RENDER_EXTERNAL_HOSTNAME = env("RENDER_EXTERNAL_HOSTNAME", default=None)
 if RENDER_EXTERNAL_HOSTNAME and RENDER_EXTERNAL_HOSTNAME not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
@@ -59,6 +66,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'drf_spectacular',
     'event',
+    'accounts',
+    'planning',
 ]
 
 MIDDLEWARE = [
@@ -95,14 +104,10 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
-# Si hay DATABASE_URL en el entorno usamos Postgres (Render la provee).
-# Si no, caemos a SQLite para que el proyecto arranque sin necesidad de .env.
+# Postgres via DATABASE_URL when set (Render), otherwise SQLite.
 if env("DATABASE_URL", default=None):
-    # El pooler de Supabase expone dos puertos con comportamientos distintos:
-    #   5432 -> session pooler: admite conexiones persistentes (lo que queremos).
-    #   6543 -> transaction pooler: recicla la conexión entre transacciones, así
-    #           que no soporta ni conn_max_age ni prepared statements.
-    # Detectamos el puerto para no romper si alguien pega la URL del 6543.
+    # Supabase's transaction pooler (port 6543) doesn't support conn_max_age
+    # or prepared statements, unlike the session pooler (5432).
     _db = dj_database_url.config(conn_max_age=600, ssl_require=True)
 
     if str(_db.get("PORT")) == "6543":
@@ -143,7 +148,8 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+# Local time so "today" (/api/hoy/) doesn't roll over early relative to UTC.
+TIME_ZONE = 'America/Bogota'
 
 USE_I18N = True
 
@@ -159,9 +165,7 @@ STATIC_URL = 'static/'
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-# En dev los correos se imprimen en consola. En qa/prod se envían por SMTP
-# con credenciales tomadas del entorno; si no se configura EMAIL_HOST, se usa
-# el backend dummy para no romper el arranque (los correos se descartan).
+# Console backend in dev; SMTP in qa/prod if EMAIL_HOST is set, dummy otherwise.
 if ENVIRONMENT == "dev":
     MAILERS = {
         "default": {
@@ -192,49 +196,71 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="no-reply@planificapp.loc
 
 
 # CORS / CSRF
-# El backend es consumido por el frontend en otro dominio, así que los
-# orígenes permitidos se configuran explícitamente por entorno.
-# NUNCA usar CORS_ALLOW_ALL_ORIGINS: cada entorno debe declarar sus orígenes.
+# Frontend lives on another domain; never use CORS_ALLOW_ALL_ORIGINS.
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 CORS_ALLOW_CREDENTIALS = True
 
 
 # Django REST Framework
-# El renderer navegable (browsable API) solo se activa en DEBUG, para no
-# exponerlo en qa/prod.
+# Browsable API only in DEBUG, not exposed in qa/prod.
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
     ]
     + (["rest_framework.renderers.BrowsableAPIRenderer"] if DEBUG else []),
+    # JSON only: form/multipart bodies could slip past CORS/CSRF cross-origin.
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'accounts.authentication.OrganizerJWTAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'accounts.permissions.IsOrganizer',
+    ],
+    # No contrib.auth AnonymousUser here: request.user is just None.
+    'UNAUTHENTICATED_USER': None,
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'EXCEPTION_HANDLER': 'event.exceptions.custom_exception_handler',
 }
 
 
-# Seguridad adicional cuando DEBUG está apagado (qa y prod).
+# JWT auth over our own accounts.User (not django.contrib.auth). The blacklist
+# app is not installed: its tables FK to auth.User. Revocation goes through
+# User.token_version (claim "ver") instead.
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ALGORITHM": "HS256",
+    "SIGNING_KEY": JWT_SIGNING_KEY,
+    "USER_ID_FIELD": "user_id",
+    "USER_ID_CLAIM": "user_id",
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "UPDATE_LAST_LOGIN": False,
+}
+
+# Absolute cap: refresh rotation cannot keep a session alive past this many
+# days since the original login.
+JWT_MAX_SESSION_DAYS = 30
+
+
+# Extra security once DEBUG is off (qa and prod).
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SECURE_SSL_REDIRECT = True
 
-    # El health check de Render puede llegar sin la cabecera X-Forwarded-Proto.
-    # Si eso pasa, el redirect a https devuelve un 301 y Render da el deploy por
-    # fallido aunque el servicio esté sano. Eximimos esa ruta del redirect.
+    # Exempt health check: it can hit us without X-Forwarded-Proto, and the
+    # https redirect would make Render think the deploy failed.
     SECURE_REDIRECT_EXEMPT = [r"^api/health/$"]
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 
-    # El frontend vive en otro dominio (planificapp-web-*.onrender.com) y llama
-    # a la API con credentials: "include". Con el valor por defecto "Lax" el
-    # navegador NO adjunta la cookie de sesión en peticiones fetch cross-site,
-    # así que la autenticación no funcionaría. "None" exige cookies Secure,
-    # que ya están activadas arriba.
+    # "Lax" would drop the session cookie on cross-site fetch from the frontend.
     SESSION_COOKIE_SAMESITE = "None"
     CSRF_COOKIE_SAMESITE = "None"
 
-    # HSTS solo en prod: en qa preferimos poder revertir a HTTP sin esperar
-    # a que expire el header en los navegadores de los usuarios.
+    # HSTS only in prod: in qa we want to be able to revert to HTTP fast.
     if ENVIRONMENT == "prod":
         SECURE_HSTS_SECONDS = 31536000
         SECURE_HSTS_INCLUDE_SUBDOMAINS = True
@@ -242,6 +268,10 @@ if not DEBUG:
 
 
 SPECTACULAR_SETTINGS = {
+    'POSTPROCESSING_HOOKS': [
+        'drf_spectacular.hooks.postprocess_schema_enums',
+        'config.openapi.drop_negative_decimal_patterns',
+    ],
     'TITLE': 'Miniproyecto Event Management API',
     'DESCRIPTION': '''
 Welcome to the Event Management API. 
@@ -259,4 +289,7 @@ Welcome to the Event Management API.
         'defaultModelsExpandDepth': 2,
         'defaultModelExpandDepth': 2,
     },
+    # Docs/schema stay open even though the rest of the API requires login.
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.AllowAny'],
+    'SERVE_AUTHENTICATION': [],
 }
