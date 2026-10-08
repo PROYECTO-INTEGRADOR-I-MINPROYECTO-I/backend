@@ -15,13 +15,14 @@ from rest_framework import status
 from rest_framework.generics import GenericAPIView, ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.response import Response
 
-from planning.services import evaluate_conflict
+from planning.services import evaluate_conflict, evaluate_day
 
 from ..models import Event, Subtask
 from ..serializers import (
     SubtaskCreateRequestSerializer,
     SubtaskReprogramSerializer,
     SubtaskSerializer,
+    SubtaskWithConflictSerializer,
 )
 from .conflicts import conflict_summary, lock_organizer, overload_response, parse_confirm
 from .mixins import OrganizerMixin
@@ -162,7 +163,7 @@ class EventSubtaskListCreateView(OrganizerMixin, ListCreateAPIView):
         """,
         tags=["Subtasks"],
         responses={
-            200: SubtaskSerializer,
+            200: SubtaskWithConflictSerializer,
             400: OpenApiResponse(description="Validation error (e.g. empty title or invalid hours)"),
             404: OpenApiResponse(description="Subtask not found for the current organizer"),
         },
@@ -187,11 +188,9 @@ class SubtaskDetailView(OrganizerMixin, RetrieveUpdateDestroyAPIView):
         with transaction.atomic():
             response = super().update(request, *args, **kwargs)
             # The change is saved either way; the summary tells the client if the day is still over.
-            if _LOAD_FIELDS.intersection(request.data):
+            if hasattr(request.data, "keys") and _LOAD_FIELDS.intersection(request.data):
                 subtask = self.get_object()
-                evaluation = evaluate_conflict(
-                    self.get_organizer(), subtask.scheduled_date, Decimal("0")
-                )
+                evaluation = evaluate_day(self.get_organizer(), subtask.scheduled_date)
                 response.data["conflicto"] = conflict_summary(evaluation)
         return response
 
@@ -218,7 +217,7 @@ Send `"confirm": true` to move it anyway. The 200 response includes a
         tags=["Subtasks"],
         request=SubtaskReprogramSerializer,
         responses={
-            200: SubtaskSerializer,
+            200: SubtaskWithConflictSerializer,
             400: OpenApiResponse(description="Missing or invalid target date"),
             404: OpenApiResponse(description="Subtask not found for the current organizer"),
             409: OpenApiResponse(description="DAILY_OVERLOAD: the target day would exceed the daily limit"),

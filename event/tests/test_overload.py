@@ -337,3 +337,26 @@ class ResolveConflictTests(OverloadBase):
         self.assertEqual(response.status_code, 409)
         subtask.refresh_from_db()
         self.assertEqual(subtask.scheduled_date, DAY)
+
+    def test_unpostponing_on_overloaded_day_returns_conflict(self):
+        self.make_subtask(5)
+        subtask = self.make_subtask(2, status="postponed")
+        response = self.patch(subtask, {"status": "pending"})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["conflicto"]["hay_conflicto"])
+        self.assertEqual(response.data["conflicto"]["horas_planificadas"], 7.0)
+
+    def test_marking_done_stamps_executed_at_and_returns_conflicto(self):
+        subtask = self.make_subtask(2)
+        response = self.patch(subtask, {"status": "done"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(response.data["executed_at"])
+        self.assertIn("conflicto", response.data)
+
+    def test_reprogram_of_done_subtask_counts_its_hours(self):
+        self.make_subtask(5)
+        subtask = self.make_subtask(2, day=DAY + timedelta(days=1), status="done")
+        url = reverse("event:subtask-reprogram", kwargs={"subtask_id": subtask.pk})
+        response = self.client.patch(url, {"scheduled_date": DAY.isoformat()}, format="json")
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["error"]["detalle"]["horas_planificadas"], 7.0)
