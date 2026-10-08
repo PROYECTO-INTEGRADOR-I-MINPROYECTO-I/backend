@@ -1,6 +1,10 @@
 from .catalog import CategorySerializer, EventTypeSerializer
 from .events import EventSerializer, validate_future_date
-from .subtasks import SubtaskCreateRequestSerializer, SubtaskSerializer
+from .subtasks import (
+    SubtaskCreateRequestSerializer,
+    SubtaskReprogramSerializer,
+    SubtaskSerializer,
+)
 
 __all__ = [
     "CategorySerializer",
@@ -9,4 +13,5 @@ __all__ = [
     "validate_future_date",
     "SubtaskSerializer",
     "SubtaskCreateRequestSerializer",
+    "SubtaskReprogramSerializer",
 ]
