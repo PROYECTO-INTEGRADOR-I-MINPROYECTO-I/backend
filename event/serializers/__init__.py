@@ -4,6 +4,7 @@ from .subtasks import (
     SubtaskCreateRequestSerializer,
     SubtaskReprogramSerializer,
     SubtaskSerializer,
+    SubtaskWithConflictSerializer,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "SubtaskSerializer",
     "SubtaskCreateRequestSerializer",
     "SubtaskReprogramSerializer",
+    "SubtaskWithConflictSerializer",
 ]
