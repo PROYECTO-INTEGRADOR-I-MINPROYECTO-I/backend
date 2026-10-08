@@ -27,6 +27,10 @@ from .conflicts import conflict_summary, lock_organizer, overload_response, pars
 from .mixins import OrganizerMixin
 
 
+# PATCH fields that change a day's load.
+_LOAD_FIELDS = {"estimated_hours", "scheduled_date", "status"}
+
+
 @extend_schema_view(
     get=extend_schema(
         summary="List subtasks for a specific event",
@@ -151,6 +155,10 @@ class EventSubtaskListCreateView(OrganizerMixin, ListCreateAPIView):
 
         Setting `status` to `"done"` stamps `executed_at` with the current
         time; moving it away from `"done"` clears `executed_at`.
+
+        When `estimated_hours`, `scheduled_date` or `status` are sent, the
+        response also includes a `conflicto` summary of the subtask's day
+        (`hay_conflicto` may stay true after the change; it never blocks).
         """,
         tags=["Subtasks"],
         responses={
@@ -174,6 +182,18 @@ class SubtaskDetailView(OrganizerMixin, RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return Subtask.objects.for_organizer(self.get_organizer())
+
+    def update(self, request, *args, **kwargs):
+        with transaction.atomic():
+            response = super().update(request, *args, **kwargs)
+            # The change is saved either way; the summary tells the client if the day is still over.
+            if _LOAD_FIELDS.intersection(request.data):
+                subtask = self.get_object()
+                evaluation = evaluate_conflict(
+                    self.get_organizer(), subtask.scheduled_date, Decimal("0")
+                )
+                response.data["conflicto"] = conflict_summary(evaluation)
+        return response
 
     def perform_update(self, serializer):
         previous_status = serializer.instance.status

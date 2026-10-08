@@ -279,3 +279,61 @@ class ReprogramTests(OverloadBase):
         mine = self.make_subtask(2, day=DAY + timedelta(days=1))
         self.assertEqual(self.reprogram(mine, {"scheduled_date": DAY.isoformat()}).status_code, 200)
         self.assertEqual(self.reprogram(theirs, {"scheduled_date": DAY.isoformat()}).status_code, 404)
+
+
+class ResolveConflictTests(OverloadBase):
+    def patch(self, subtask, payload):
+        url = reverse("event:subtask-detail", kwargs={"subtask_id": subtask.pk})
+        return self.client.patch(url, payload, format="json")
+
+    def test_small_reduction_keeps_conflict(self):
+        self.make_subtask(4)
+        subtask = self.make_subtask(3)
+        response = self.patch(subtask, {"estimated_hours": 2.5})
+        self.assertEqual(response.status_code, 200)
+        conflicto = response.data["conflicto"]
+        self.assertTrue(conflicto["hay_conflicto"])
+        self.assertEqual(conflicto["horas_planificadas"], 6.5)
+        self.assertEqual(conflicto["exceso"], 0.5)
+        subtask.refresh_from_db()
+        self.assertEqual(subtask.estimated_hours, Decimal("2.5"))
+
+    def test_enough_reduction_resolves_conflict(self):
+        self.make_subtask(4)
+        subtask = self.make_subtask(3)
+        response = self.patch(subtask, {"estimated_hours": 2})
+        self.assertFalse(response.data["conflicto"]["hay_conflicto"])
+
+    def test_postponing_resolves_conflict(self):
+        self.make_subtask(4)
+        subtask = self.make_subtask(3)
+        response = self.patch(subtask, {"status": "postponed"})
+        self.assertFalse(response.data["conflicto"]["hay_conflicto"])
+        self.assertEqual(response.data["conflicto"]["horas_planificadas"], 4.0)
+
+    def test_moving_with_patch_reports_new_day(self):
+        self.make_subtask(6)
+        subtask = self.make_subtask(1, day=DAY + timedelta(days=1))
+        response = self.patch(subtask, {"scheduled_date": DAY.isoformat()})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["conflicto"]["hay_conflicto"])
+
+    def test_no_conflicto_when_unrelated_field_changes(self):
+        subtask = self.make_subtask(1)
+        response = self.patch(subtask, {"title": "Otro"})
+        self.assertNotIn("conflicto", response.data)
+
+    def test_zero_hours_is_400(self):
+        subtask = self.make_subtask(1)
+        self.assertEqual(self.patch(subtask, {"estimated_hours": 0}).status_code, 400)
+
+    def test_reprogram_to_another_overloaded_day_is_blocked_again(self):
+        self.make_subtask(6, day=DAY + timedelta(days=1))
+        subtask = self.make_subtask(2)
+        url = reverse("event:subtask-reprogram", kwargs={"subtask_id": subtask.pk})
+        response = self.client.patch(
+            url, {"scheduled_date": (DAY + timedelta(days=1)).isoformat()}, format="json"
+        )
+        self.assertEqual(response.status_code, 409)
+        subtask.refresh_from_db()
+        self.assertEqual(subtask.scheduled_date, DAY)
