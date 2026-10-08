@@ -15,7 +15,13 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import User
-from .serializers import AuthTokenSerializer, LoginSerializer, UserRegisterSerializer, UserSerializer
+from .serializers import (
+    AuthTokenSerializer,
+    LoginSerializer,
+    UserRegisterSerializer,
+    UserSerializer,
+    UserSettingsSerializer,
+)
 from .authentication import OrganizerJWTAuthentication
 from .tokens import issue_tokens
 
@@ -263,6 +269,58 @@ class MeView(APIView):
 
     def get(self, request):
         return Response(UserSerializer(request.user).data)
+
+
+@extend_schema_view(
+    get=extend_schema(
+        summary="Get user settings",
+        description="Returns the settings of the authenticated user.",
+        tags=["User settings"],
+        responses={
+            200: UserSettingsSerializer,
+            401: OpenApiResponse(description="Missing, invalid or revoked access token"),
+        },
+    ),
+    put=extend_schema(
+        summary="Update user settings",
+        description="Updates the daily hours limit (1 to 16). Other fields are ignored.",
+        tags=["User settings"],
+        request=UserSettingsSerializer,
+        responses={
+            200: UserSettingsSerializer,
+            400: OpenApiResponse(description="Limit out of range or not a number"),
+            401: OpenApiResponse(description="Missing, invalid or revoked access token"),
+        },
+    ),
+    patch=extend_schema(
+        summary="Partially update user settings",
+        description="Updates the daily hours limit (1 to 16). Other fields are ignored.",
+        tags=["User settings"],
+        request=UserSettingsSerializer,
+        responses={
+            200: UserSettingsSerializer,
+            400: OpenApiResponse(description="Limit out of range or not a number"),
+            401: OpenApiResponse(description="Missing, invalid or revoked access token"),
+        },
+    ),
+)
+class UserSettingsView(APIView):
+    # Uses the default authentication and permission (Bearer JWT + IsOrganizer).
+
+    def get(self, request):
+        return Response(UserSettingsSerializer(request.user).data)
+
+    def put(self, request):
+        return self._update(request, partial=False)
+
+    def patch(self, request):
+        return self._update(request, partial=True)
+
+    def _update(self, request, partial):
+        serializer = UserSettingsSerializer(request.user, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 
 @extend_schema_view(
