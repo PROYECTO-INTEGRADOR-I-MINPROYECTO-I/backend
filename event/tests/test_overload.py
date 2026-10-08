@@ -264,6 +264,10 @@ class ReprogramTests(OverloadBase):
         response = self.reprogram(subtask, {"scheduled_date": DAY.isoformat()})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["status"], "postponed")
+        conflicto = response.data["conflicto"]
+        self.assertFalse(conflicto["hay_conflicto"])
+        self.assertEqual(conflicto["horas_planificadas"], 6.0)
+        self.assertEqual(conflicto["exceso"], 0.0)
 
     def test_done_counts_on_target_day(self):
         self.make_subtask(5, status="done")

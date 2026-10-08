@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -218,7 +220,6 @@ class SubtaskReprogramView(OrganizerMixin, GenericAPIView):
         return Subtask.objects.for_organizer(self.get_organizer()).select_related("category")
 
     def patch(self, request, subtask_id):
-        subtask = get_object_or_404(self.get_queryset(), pk=subtask_id)
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         new_date = serializer.validated_data["scheduled_date"]
@@ -226,12 +227,14 @@ class SubtaskReprogramView(OrganizerMixin, GenericAPIView):
 
         organizer = self.get_organizer()
         with transaction.atomic():
-            # Postponed subtasks don't use capacity, so they never block a move.
+            lock_organizer(organizer)
+            queryset = self.get_queryset().select_for_update(of=("self",))
+            subtask = get_object_or_404(queryset, pk=subtask_id)
+            # Postponed subtasks don't use capacity: evaluate the day's load alone.
+            hours = Decimal("0") if subtask.status == "postponed" else subtask.estimated_hours
             evaluation = evaluate_conflict(
-                organizer, new_date, subtask.estimated_hours, exclude_subtask_id=subtask.pk
+                organizer, new_date, hours, exclude_subtask_id=subtask.pk
             )
-            if subtask.status == "postponed":
-                evaluation["has_conflict"] = False
             if evaluation["has_conflict"] and not confirm:
                 return overload_response(evaluation)
 
