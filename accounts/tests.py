@@ -269,7 +269,7 @@ class UserSettingsTests(APITestCase):
 
         response = self.client.patch(
             self.url,
-            {"max_daily_hours": 8, "email": "hack@example.com", "name": "Otro"},
+            {"max_daily_hours": 8, "email": "hack@example.com", "name": "Otro", "token_version": 99},
             format="json",
         )
 
@@ -278,6 +278,17 @@ class UserSettingsTests(APITestCase):
         user.refresh_from_db()
         self.assertEqual(user.email, "ana@example.com")
         self.assertEqual(user.name, "Ana")
+        self.assertEqual(user.token_version, 0)
+
+    def test_decimal_limit_and_missing_field(self):
+        user = self.make_user()
+        self.auth(user)
+
+        response = self.client.patch(self.url, {"max_daily_hours": 7.5}, format="json")
+        self.assertEqual(response.json(), {"max_daily_hours": "7.50"})
+
+        response = self.client.put(self.url, {}, format="json")
+        self.assertEqual(response.status_code, 400)
 
     def test_requires_authentication(self):
         self.assertEqual(self.client.get(self.url).status_code, 401)

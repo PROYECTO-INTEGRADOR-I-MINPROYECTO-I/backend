@@ -47,6 +47,13 @@ class UserSettingsSerializer(serializers.ModelSerializer):
         # Only this field: anything else in the body is ignored.
         fields = ['max_daily_hours']
 
+    def update(self, instance, validated_data):
+        # Save only this column so a concurrent logout's token_version isn't overwritten.
+        if 'max_daily_hours' in validated_data:
+            instance.max_daily_hours = validated_data['max_daily_hours']
+            instance.save(update_fields=['max_daily_hours'])
+        return instance
+
 
 class AuthTokenSerializer(serializers.Serializer):
     # Swagger only: shape of the login / register / refresh response.
