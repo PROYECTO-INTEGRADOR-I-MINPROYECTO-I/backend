@@ -182,3 +182,96 @@ class CreateConflictTests(OverloadBase):
         response = self.post_subtask(self.create_payload(1))
         types = [a["tipo"] for a in response.data["error"]["alternativas"]]
         self.assertEqual(types, ["mover", "posponer"])
+
+
+class ReprogramTests(OverloadBase):
+    def reprogram(self, subtask, payload):
+        url = reverse("event:subtask-reprogram", kwargs={"subtask_id": subtask.pk})
+        return self.client.patch(url, payload, format="json")
+
+    def test_reprogram_without_conflict(self):
+        subtask = self.make_subtask(2)
+        response = self.reprogram(subtask, {"scheduled_date": "2026-10-06"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["scheduled_date"], "2026-10-06")
+        self.assertEqual(response.data["status"], "pending")
+        self.assertFalse(response.data["conflicto"]["hay_conflicto"])
+        subtask.refresh_from_db()
+        self.assertEqual(subtask.scheduled_date, date(2026, 10, 6))
+
+    def test_scenario_overload_across_events(self):
+        self.make_subtask(3)
+        self.make_subtask(2, event=self.make_event(self.user, "B"))
+        moving = self.make_subtask(2, day=DAY + timedelta(days=3), event=self.make_event(self.user, "C"))
+        response = self.reprogram(moving, {"scheduled_date": DAY.isoformat()})
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["error"]["detalle"]["horas_planificadas"], 7.0)
+        self.assertEqual(
+            response.data["error"]["message"],
+            "Quedarías con 7h de gestión planificadas (límite 6h)",
+        )
+        moving.refresh_from_db()
+        self.assertEqual(moving.scheduled_date, DAY + timedelta(days=3))
+
+    def test_confirm_saves_despite_conflict(self):
+        self.make_subtask(5)
+        moving = self.make_subtask(2, day=DAY + timedelta(days=1))
+        response = self.reprogram(moving, {"scheduled_date": DAY.isoformat(), "confirm": True})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["conflicto"]["hay_conflicto"])
+        moving.refresh_from_db()
+        self.assertEqual(moving.scheduled_date, DAY)
+
+    def test_same_day_is_not_double_counted(self):
+        subtask = self.make_subtask(5)
+        response = self.reprogram(subtask, {"scheduled_date": DAY.isoformat()})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["conflicto"]["horas_planificadas"], 5.0)
+
+    def test_organizer_limit_applies(self):
+        self.user.max_daily_hours = Decimal("4")
+        self.user.save()
+        self.make_subtask(3)
+        moving = self.make_subtask(2, day=DAY + timedelta(days=1))
+        response = self.reprogram(moving, {"scheduled_date": DAY.isoformat()})
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["error"]["detalle"]["limite"], 4.0)
+
+    def test_invalid_or_missing_date_is_400(self):
+        subtask = self.make_subtask(2)
+        for payload in ({}, {"scheduled_date": "not-a-date"}, {"scheduled_date": None}):
+            response = self.reprogram(subtask, payload)
+            self.assertEqual(response.status_code, 400)
+            self.assertFalse(response.data["success"])
+            self.assertIn(
+                "La fecha objetivo no es válida.", response.data["error"]["details"]["scheduled_date"]
+            )
+
+    def test_past_date_allowed(self):
+        subtask = self.make_subtask(2)
+        response = self.reprogram(subtask, {"scheduled_date": "2020-01-01"})
+        self.assertEqual(response.status_code, 200)
+
+    def test_postponed_does_not_count_on_target_day(self):
+        self.make_subtask(6, status="postponed")
+        subtask = self.make_subtask(2, day=DAY + timedelta(days=1))
+        response = self.reprogram(subtask, {"scheduled_date": DAY.isoformat()})
+        self.assertEqual(response.status_code, 200)
+
+    def test_postponed_subtask_moves_without_blocking(self):
+        self.make_subtask(6)
+        subtask = self.make_subtask(3, day=DAY + timedelta(days=1), status="postponed")
+        response = self.reprogram(subtask, {"scheduled_date": DAY.isoformat()})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "postponed")
+
+    def test_done_counts_on_target_day(self):
+        self.make_subtask(5, status="done")
+        subtask = self.make_subtask(2, day=DAY + timedelta(days=1))
+        self.assertEqual(self.reprogram(subtask, {"scheduled_date": DAY.isoformat()}).status_code, 409)
+
+    def test_other_organizer_subtasks_do_not_count_and_are_404(self):
+        theirs = self.make_subtask(5, event=self.make_event(self.other, "B"))
+        mine = self.make_subtask(2, day=DAY + timedelta(days=1))
+        self.assertEqual(self.reprogram(mine, {"scheduled_date": DAY.isoformat()}).status_code, 200)
+        self.assertEqual(self.reprogram(theirs, {"scheduled_date": DAY.isoformat()}).status_code, 404)

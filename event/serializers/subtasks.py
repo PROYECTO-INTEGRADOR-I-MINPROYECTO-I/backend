@@ -93,3 +93,14 @@ class SubtaskCreateRequestSerializer(SubtaskSerializer):
 
     class Meta(SubtaskSerializer.Meta):
         fields = SubtaskSerializer.Meta.fields + ["confirm"]
+
+
+class SubtaskReprogramSerializer(serializers.Serializer):
+    scheduled_date = serializers.DateField(
+        error_messages={
+            "required": "La fecha objetivo no es válida.",
+            "null": "La fecha objetivo no es válida.",
+            "invalid": "La fecha objetivo no es válida.",
+        },
+    )
+    confirm = serializers.BooleanField(required=False, default=False)
