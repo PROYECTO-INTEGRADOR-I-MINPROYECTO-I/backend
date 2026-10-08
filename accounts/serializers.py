@@ -10,18 +10,32 @@ from .models import User
 class LoginSerializer(serializers.Serializer):
     # Swagger only; the view validates.
     email = serializers.EmailField()
-    password = serializers.CharField(style={'input_type': 'password'})
+    password = serializers.CharField(style={"input_type": "password"})
 
 
 class UserSerializer(serializers.ModelSerializer):
-    name = serializers.CharField(required=True, allow_blank=False)  # No empty named user allowed
+    name = serializers.CharField(
+        required=True, allow_blank=False
+    )  # No empty named user allowed
     # Read-only for now: the daily limit becomes configurable with US-12.
-    max_daily_hours = serializers.DecimalField(max_digits=4, decimal_places=2, read_only=True)
+    max_daily_hours = serializers.DecimalField(
+        max_digits=4, decimal_places=2, read_only=True
+    )
 
     class Meta:
         model = User
         # No password_hash here: it must never reach a JSON response.
-        fields = ['user_id', 'name', 'email', 'max_daily_hours']
+        fields = ["user_id", "name", "email", "max_daily_hours"]
+
+
+class UserMaxHoursSerializer(serializers.ModelSerializer):
+    max_daily_hours = serializers.DecimalField(
+        max_digits=4, decimal_places=2, required=True
+    )
+
+    class Meta:
+        model = User
+        fields = ["max_daily_hours"]
 
 
 class AuthTokenSerializer(serializers.Serializer):
@@ -54,7 +68,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         write_only=True,
         required=True,
         min_length=8,
-        style={'input_type': 'password'},
+        style={"input_type": "password"},
         error_messages={
             "required": "Escribe tu contraseña.",
             "min_length": "La contraseña debe tener al menos 8 caracteres.",
@@ -63,9 +77,9 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['user_id', 'email', 'name', 'max_daily_hours', 'password']
+        fields = ["user_id", "email", "name", "max_daily_hours", "password"]
         # New accounts start with the model default (6h); it can't be set here.
-        read_only_fields = ['user_id', 'max_daily_hours']
+        read_only_fields = ["user_id", "max_daily_hours"]
 
     def validate_email(self, value):
         value = value.lower()
@@ -82,10 +96,10 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        password = validated_data.pop('password')
+        password = validated_data.pop("password")
         user = User.objects.create(
-            name=validated_data['name'],
-            email=validated_data['email'],
+            name=validated_data["name"],
+            email=validated_data["email"],
             password_hash=make_password(password),
         )
         return user

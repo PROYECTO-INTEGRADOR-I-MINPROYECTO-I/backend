@@ -14,6 +14,10 @@ from .tokens import issue_tokens
 PASSWORD = "clave-segura-123"
 FRONT_ORIGIN = "http://localhost:5173"
 
+"""
+Test login correct implementation, fail safe and message errors with incomplete credentials on request.
+"""
+
 
 @override_settings(CORS_ALLOWED_ORIGINS=[FRONT_ORIGIN])
 class JWTAuthTests(APITestCase):

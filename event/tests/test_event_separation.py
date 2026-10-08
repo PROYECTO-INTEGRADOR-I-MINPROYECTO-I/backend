@@ -7,6 +7,11 @@ from datetime import timedelta
 from rest_framework.test import APIClient, APITestCase
 
 
+"""
+Tests the isolation of event responses by user
+"""
+
+
 class EventAccessTests(APITestCase):
     def setUp(self):
         self.client = APIClient()
@@ -28,12 +33,14 @@ class EventAccessTests(APITestCase):
 
     def test_user_cannot_view_another_users_event_detail(self):
         # Reverse using the 'events' namespace
+
+        # Bypass get_organizer logic passing the using to apply login
         self.client.force_authenticate(user=self.user_b)
         url = reverse("event:event-detail", kwargs={"eid": self.event_a.pk})
 
         response = self.client.get(url)
 
-        # Expect 404 (if filtered in get_queryset) or 403 (if using permission check)
+        # Expect 404 (for filtered in get_queryset)
         self.assertEqual(response.status_code, 404)
 
     def test_user_cannot_see_another_users_events_in_list(self):
