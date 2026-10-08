@@ -156,6 +156,17 @@ class CreateConflictTests(OverloadBase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(Subtask.objects.count(), 2)
 
+    def test_confirm_string_true_confirms_and_false_does_not(self):
+        self.make_subtask(5)
+        self.assertEqual(self.post_subtask(self.create_payload(2, confirm="false")).status_code, 409)
+        self.assertEqual(self.post_subtask(self.create_payload(2, confirm="true")).status_code, 201)
+
+    def test_invalid_confirm_is_400(self):
+        response = self.post_subtask(self.create_payload(1, confirm="maybe"))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("confirm", response.data["error"]["details"])
+        self.assertEqual(Subtask.objects.count(), 0)
+
     def test_validation_error_comes_before_conflict(self):
         self.make_subtask(6)
         response = self.post_subtask(self.create_payload(0))

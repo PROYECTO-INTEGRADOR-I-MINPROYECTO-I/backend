@@ -1,6 +1,32 @@
 """Maps planning conflict evaluations to the Spanish JSON the frontend consumes."""
-from rest_framework import status
+from rest_framework import serializers, status
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
+
+from accounts.models import User
+
+_CONFIRM_FIELD = serializers.BooleanField(
+    required=False,
+    error_messages={
+        "invalid": "El valor de confirm no es válido.",
+        "null": "El valor de confirm no es válido.",
+    },
+)
+
+
+def parse_confirm(data):
+    """Reads the optional boolean `confirm` from a request body (invalid -> 400)."""
+    if not hasattr(data, "get") or "confirm" not in data:
+        return False
+    try:
+        return _CONFIRM_FIELD.run_validation(data["confirm"])
+    except ValidationError as exc:
+        raise ValidationError({"confirm": exc.detail})
+
+
+def lock_organizer(organizer):
+    """Serializes concurrent load checks per organizer (no-op on SQLite)."""
+    User.objects.select_for_update().get(pk=organizer.pk)
 
 
 def _num(value):

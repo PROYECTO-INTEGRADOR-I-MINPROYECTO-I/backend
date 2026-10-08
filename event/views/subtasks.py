@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
@@ -16,7 +17,7 @@ from planning.services import evaluate_conflict
 
 from ..models import Event, Subtask
 from ..serializers import SubtaskCreateRequestSerializer, SubtaskSerializer
-from .conflicts import overload_response
+from .conflicts import lock_organizer, overload_response, parse_confirm
 from .mixins import OrganizerMixin
 
 
@@ -102,14 +103,17 @@ class EventSubtaskListCreateView(OrganizerMixin, ListCreateAPIView):
         serializer.is_valid(raise_exception=True)
 
         data = serializer.validated_data
-        if data.get("status", "pending") != "postponed" and request.data.get("confirm") is not True:
-            evaluation = evaluate_conflict(
-                self.get_organizer(), data["scheduled_date"], data["estimated_hours"]
-            )
-            if evaluation["has_conflict"]:
-                return overload_response(evaluation)
-
-        self.perform_create(serializer)
+        confirm = parse_confirm(request.data)
+        with transaction.atomic():
+            if data.get("status", "pending") != "postponed" and not confirm:
+                organizer = self.get_organizer()
+                lock_organizer(organizer)
+                evaluation = evaluate_conflict(
+                    organizer, data["scheduled_date"], data["estimated_hours"]
+                )
+                if evaluation["has_conflict"]:
+                    return overload_response(evaluation)
+            self.perform_create(serializer)
         response = Response(
             serializer.data,
             status=status.HTTP_201_CREATED,
