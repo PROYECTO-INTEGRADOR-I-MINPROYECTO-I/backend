@@ -15,13 +15,44 @@ class LoginSerializer(serializers.Serializer):
 
 class UserSerializer(serializers.ModelSerializer):
     name = serializers.CharField(required=True, allow_blank=False)  # No empty named user allowed
-    # Read-only for now: the daily limit becomes configurable with US-12.
+    # Read-only here: it is edited through UserSettingsSerializer.
     max_daily_hours = serializers.DecimalField(max_digits=4, decimal_places=2, read_only=True)
 
     class Meta:
         model = User
         # No password_hash here: it must never reach a JSON response.
         fields = ['user_id', 'name', 'email', 'max_daily_hours']
+
+
+class UserSettingsSerializer(serializers.ModelSerializer):
+    max_daily_hours = serializers.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        min_value=1,
+        max_value=16,
+        error_messages={
+            "required": "Escribe el límite diario de horas.",
+            "null": "Escribe el límite diario de horas.",
+            "invalid": "El límite debe ser un número válido.",
+            "min_value": "El límite debe estar entre 1 y 16 horas",
+            "max_value": "El límite debe estar entre 1 y 16 horas",
+            "max_digits": "El límite debe estar entre 1 y 16 horas",
+            "max_decimal_places": "El límite admite máximo 2 decimales.",
+            "max_whole_digits": "El límite debe estar entre 1 y 16 horas",
+        },
+    )
+
+    class Meta:
+        model = User
+        # Only this field: anything else in the body is ignored.
+        fields = ['max_daily_hours']
+
+    def update(self, instance, validated_data):
+        # Save only this column so a concurrent logout's token_version isn't overwritten.
+        if 'max_daily_hours' in validated_data:
+            instance.max_daily_hours = validated_data['max_daily_hours']
+            instance.save(update_fields=['max_daily_hours'])
+        return instance
 
 
 class AuthTokenSerializer(serializers.Serializer):
