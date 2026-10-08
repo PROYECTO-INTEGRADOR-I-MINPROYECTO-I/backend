@@ -7,7 +7,7 @@ from django.db.models import F
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
-from rest_framework.generics import CreateAPIView
+from rest_framework.generics import CreateAPIView, UpdateAPIView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -15,7 +15,13 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import User
-from .serializers import AuthTokenSerializer, LoginSerializer, UserRegisterSerializer, UserSerializer
+from .serializers import (
+    AuthTokenSerializer,
+    LoginSerializer,
+    UserRegisterSerializer,
+    UserSerializer,
+    UserMaxHoursSerializer,
+)
 from .authentication import OrganizerJWTAuthentication
 from .tokens import issue_tokens
 
@@ -252,17 +258,49 @@ class RefreshView(APIView):
         return _auth_response(user, status.HTTP_200_OK, auth_time=token["auth_time"])
 
 
-@extend_schema(
-    summary="Current user",
-    description="Returns the authenticated user (Bearer access token).",
-    tags=["Auth"],
-    responses={200: UserSerializer, 401: OpenApiResponse(description="Missing, invalid or revoked access token")},
+@extend_schema_view(
+    get=extend_schema(
+        summary="Current user",
+        description="Returns the authenticated user (Bearer access token).",
+        tags=["Auth"],
+        responses={
+            200: UserSerializer,
+            401: OpenApiResponse(
+                description="Missing, invalid or revoked access token"
+            ),
+        },
+    ),
+    patch=extend_schema(
+        summary="Current user modifications",
+        description="Patches the current User, the bearer of access token",
+        tags=["Auth"],
+        request=UserMaxHoursSerializer,
+        responses={
+            200: UserMaxHoursSerializer,
+            401: OpenApiResponse(
+                description="Missing, invalid or revoked access token"
+            ),
+            400: OpenApiResponse(description="Include at least one write field"),
+        },
+    ),
 )
 class MeView(APIView):
     # Uses the default authentication and permission (Bearer JWT + IsOrganizer).
 
     def get(self, request):
         return Response(UserSerializer(request.user).data)
+
+    def patch(self, request):
+        # Pass request.user as the instance to update
+        serializer = UserMaxHoursSerializer(
+            request.user, data=request.data, partial=True
+        )
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @extend_schema_view(
@@ -288,3 +326,20 @@ class RegisterView(CreateAPIView):
         user = serializer.save()
 
         return _auth_response(user, status.HTTP_201_CREATED)
+
+
+@extend_schema_view(
+    post=extend_schema(
+        summary="Register a user",
+        description="Creates a new account. " + _LOGIN_RESPONSE_DESCRIPTION,
+        tags=["Auth"],
+        responses={
+            201: AuthTokenSerializer,
+            400: OpenApiResponse(description="Invalid data or email not available"),
+        },
+    ),
+)
+class MaxHoursUpdateView(UpdateAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserMaxHoursSerializer
+    lookup_field = "user_id"
