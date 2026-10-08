@@ -102,3 +102,65 @@ def event_progress(event):
 
     percentage = int(round((completed / total) * 100)) if total else 0
     return {"completed": completed, "total": total, "percentage": percentage}
+
+
+# Statuses that consume daily capacity; postponed ones don't.
+_LOAD_STATUSES = ("pending", "done")
+SUGGESTION_LOOKAHEAD_DAYS = 30
+MAX_SUGGESTED_DATES = 3
+
+
+def _to_decimal(value):
+    return value if isinstance(value, Decimal) else Decimal(str(value))
+
+
+def _load_qs(organizer, exclude_subtask_id=None):
+    qs = Subtask.objects.for_organizer(organizer).filter(status__in=_LOAD_STATUSES)
+    if exclude_subtask_id is not None:
+        qs = qs.exclude(subtask_id=exclude_subtask_id)
+    return qs
+
+
+def daily_load(organizer, day, exclude_subtask_id=None):
+    """Hours planned (pending + done) across all the organizer's events on a day."""
+    total = _load_qs(organizer, exclude_subtask_id).filter(scheduled_date=day).aggregate(
+        total=Sum("estimated_hours")
+    )["total"]
+    return total or Decimal("0")
+
+
+def evaluate_conflict(organizer, day, hours, exclude_subtask_id=None):
+    """Checks whether adding `hours` to `day` goes over the organizer's daily limit."""
+    limit = _to_decimal(organizer.max_daily_hours)
+    hours = _to_decimal(hours)
+    load = daily_load(organizer, day, exclude_subtask_id)
+    projected = load + hours
+    excess = max(projected - limit, Decimal("0"))
+
+    window_end = day + timedelta(days=SUGGESTION_LOOKAHEAD_DAYS)
+    rows = (
+        _load_qs(organizer, exclude_subtask_id)
+        .filter(scheduled_date__gt=day, scheduled_date__lte=window_end)
+        .values("scheduled_date")
+        .annotate(total=Sum("estimated_hours"))
+    )
+    loads = {row["scheduled_date"]: row["total"] for row in rows}
+
+    suggested_dates = []
+    for offset in range(1, SUGGESTION_LOOKAHEAD_DAYS + 1):
+        candidate = day + timedelta(days=offset)
+        if limit - loads.get(candidate, Decimal("0")) >= hours:
+            suggested_dates.append(candidate)
+            if len(suggested_dates) == MAX_SUGGESTED_DATES:
+                break
+
+    max_hours = limit - load
+    return {
+        "has_conflict": projected > limit,
+        "date": day,
+        "projected": projected,
+        "limit": limit,
+        "excess": excess,
+        "suggested_dates": suggested_dates,
+        "max_hours": max_hours if max_hours > 0 else None,
+    }

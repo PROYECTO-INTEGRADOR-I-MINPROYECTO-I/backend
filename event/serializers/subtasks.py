@@ -84,3 +84,12 @@ class SubtaskSerializer(serializers.ModelSerializer):
         if value <= 0:
             raise ValidationError("Las horas estimadas deben ser mayores a 0.")
         return value
+
+
+class SubtaskCreateRequestSerializer(SubtaskSerializer):
+    """Documents the create body; `confirm` is read by the view and never stored."""
+
+    confirm = serializers.BooleanField(required=False, write_only=True)
+
+    class Meta(SubtaskSerializer.Meta):
+        fields = SubtaskSerializer.Meta.fields + ["confirm"]
