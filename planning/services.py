@@ -129,6 +129,19 @@ def daily_load(organizer, day, exclude_subtask_id=None):
     return total or Decimal("0")
 
 
+def days_over_limit(organizer, limit, since):
+    """Days from `since` on whose planned hours exceed `limit`, as (date, hours) pairs."""
+    rows = (
+        _load_qs(organizer)
+        .filter(scheduled_date__gte=since)
+        .values("scheduled_date")
+        .annotate(total=Sum("estimated_hours"))
+        .filter(total__gt=limit)
+        .order_by("scheduled_date")
+    )
+    return [(row["scheduled_date"], row["total"]) for row in rows]
+
+
 def evaluate_conflict(organizer, day, hours, exclude_subtask_id=None):
     """Checks whether adding `hours` to `day` goes over the organizer's daily limit."""
     limit = _to_decimal(organizer.max_daily_hours)
