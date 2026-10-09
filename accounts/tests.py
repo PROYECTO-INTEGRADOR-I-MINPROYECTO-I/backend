@@ -187,3 +187,114 @@ class TestRegister(APITestCase):
         self.assertIn(
             "Escribe tu contraseña.", response.data["error"]["details"]["password"]
         )
+
+
+class UserSettingsTests(APITestCase):
+    url = "/api/user/settings/"
+    limit_message = "El límite debe estar entre 1 y 16 horas"
+
+    def make_user(self, email="ana@example.com"):
+        return User.objects.create(
+            name="Ana", email=email, password_hash=make_password(PASSWORD)
+        )
+
+    def auth(self, user):
+        _refresh, access = issue_tokens(user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+    def test_new_user_defaults_to_six_hours(self):
+        user = self.make_user()
+        self.auth(user)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"max_daily_hours": "6.00"})
+
+    def test_out_of_range_values_are_rejected(self):
+        user = self.make_user()
+        self.auth(user)
+
+        for value in (0, 0.5, 16.5, 17):
+            for method in (self.client.put, self.client.patch):
+                response = method(self.url, {"max_daily_hours": value}, format="json")
+                self.assertEqual(response.status_code, 400, value)
+                self.assertEqual(
+                    response.json()["error"]["details"]["max_daily_hours"],
+                    [self.limit_message],
+                    value,
+                )
+
+        user.refresh_from_db()
+        self.assertEqual(float(user.max_daily_hours), 6.0)
+
+    def test_non_numeric_value_is_rejected(self):
+        self.auth(self.make_user())
+
+        response = self.client.put(self.url, {"max_daily_hours": "abc"}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()["error"]["details"]["max_daily_hours"], ["El límite debe ser un número válido."]
+        )
+
+    def test_boundary_values_are_accepted_and_persisted(self):
+        user = self.make_user()
+        self.auth(user)
+
+        for value, expected in ((1, "1.00"), (16, "16.00")):
+            response = self.client.put(self.url, {"max_daily_hours": value}, format="json")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json(), {"max_daily_hours": expected})
+            user.refresh_from_db()
+            self.assertEqual(str(user.max_daily_hours), expected)
+
+    def test_each_organizer_keeps_their_own_limit(self):
+        user_a = self.make_user("a@example.com")
+        user_b = self.make_user("b@example.com")
+
+        self.auth(user_a)
+        self.client.patch(self.url, {"max_daily_hours": 3}, format="json")
+        self.auth(user_b)
+        self.client.patch(self.url, {"max_daily_hours": 10}, format="json")
+
+        self.auth(user_a)
+        self.assertEqual(self.client.get(self.url).json(), {"max_daily_hours": "3.00"})
+        self.auth(user_b)
+        self.assertEqual(self.client.get(self.url).json(), {"max_daily_hours": "10.00"})
+
+    def test_extra_fields_are_ignored(self):
+        user = self.make_user()
+        self.auth(user)
+
+        response = self.client.patch(
+            self.url,
+            {"max_daily_hours": 8, "email": "hack@example.com", "name": "Otro", "token_version": 99},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"max_daily_hours": "8.00"})
+        user.refresh_from_db()
+        self.assertEqual(user.email, "ana@example.com")
+        self.assertEqual(user.name, "Ana")
+        self.assertEqual(user.token_version, 0)
+
+    def test_decimal_limit_and_missing_field(self):
+        user = self.make_user()
+        self.auth(user)
+
+        response = self.client.patch(self.url, {"max_daily_hours": 7.5}, format="json")
+        self.assertEqual(response.json(), {"max_daily_hours": "7.50"})
+
+        response = self.client.put(self.url, {}, format="json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_requires_authentication(self):
+        self.assertEqual(self.client.get(self.url).status_code, 401)
+        self.assertEqual(
+            self.client.put(self.url, {"max_daily_hours": 8}, format="json").status_code, 401
+        )
+        self.assertEqual(
+            self.client.patch(self.url, {"max_daily_hours": 8}, format="json").status_code, 401
+        )
