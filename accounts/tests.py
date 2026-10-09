@@ -1,12 +1,15 @@
 import time
+from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib.auth.hashers import check_password, make_password
 from django.test import override_settings
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from event.models import Event
+from event.models import Category, Event, Subtask
 
 from .models import User
 from .tokens import issue_tokens
@@ -298,3 +301,133 @@ class UserSettingsTests(APITestCase):
         self.assertEqual(
             self.client.patch(self.url, {"max_daily_hours": 8}, format="json").status_code, 401
         )
+
+
+class UserSettingsLowerLimitTests(APITestCase):
+    url = "/api/user/settings/"
+
+    def setUp(self):
+        self.user = User.objects.create(
+            name="Ana", email="ana@example.com", password_hash=make_password(PASSWORD)
+        )
+        self.category = Category.objects.filter(user__isnull=True).first()
+        self.today = timezone.localdate()
+        self.event = self.make_event(self.user)
+        _refresh, access = issue_tokens(self.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+    def make_event(self, user):
+        return Event.objects.create(
+            name="Evento", due_date=timezone.now() + timedelta(days=60), user=user
+        )
+
+    def plan(self, hours, offset=1, status="pending", event=None):
+        return Subtask.objects.create(
+            eid=event or self.event,
+            title="Tarea",
+            category=self.category,
+            estimated_hours=Decimal(str(hours)),
+            scheduled_date=self.today + timedelta(days=offset),
+            status=status,
+        )
+
+    def day(self, offset):
+        return (self.today + timedelta(days=offset)).strftime("%d/%m/%Y")
+
+    def message(self, limit, listed):
+        return (
+            f"No puedes bajar el límite a {limit}h: hay días con más horas planificadas "
+            f"({listed}). Reprograma o reduce esas gestiones primero."
+        )
+
+    def assert_blocked(self, method, limit, expected):
+        response = method(self.url, {"max_daily_hours": limit}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"]["details"]["max_daily_hours"], [expected])
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.max_daily_hours, Decimal("6"))
+
+    def test_lowering_below_future_load_is_rejected(self):
+        self.plan(4, 1)
+        self.plan(3, 1)
+        self.plan(5, 2)
+        expected = self.message(4, f"{self.day(1)}: 7h, {self.day(2)}: 5h")
+
+        self.assert_blocked(self.client.patch, 4, expected)
+        self.assert_blocked(self.client.put, 4, expected)
+
+    def test_decimal_hours_are_formatted(self):
+        self.plan(3.5, 1)
+        self.plan(3, 1)
+
+        self.assert_blocked(self.client.patch, 5, self.message(5, f"{self.day(1)}: 6.5h"))
+
+    def test_lowering_to_exact_load_is_allowed(self):
+        self.plan(4, 1)
+
+        for method in (self.client.patch, self.client.put):
+            self.user.max_daily_hours = Decimal("6")
+            self.user.save()
+            response = method(self.url, {"max_daily_hours": 4}, format="json")
+            self.assertEqual(response.status_code, 200)
+            self.user.refresh_from_db()
+            self.assertEqual(self.user.max_daily_hours, Decimal("4"))
+
+    def test_past_overloaded_day_does_not_block(self):
+        self.plan(9, -1)
+
+        response = self.client.patch(self.url, {"max_daily_hours": 3}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_today_counts(self):
+        self.plan(5, 0)
+
+        self.assert_blocked(self.client.patch, 4, self.message(4, f"{self.day(0)}: 5h"))
+
+    def test_postponed_does_not_count(self):
+        self.plan(2, 1)
+        self.plan(8, 1, status="postponed")
+
+        response = self.client.patch(self.url, {"max_daily_hours": 3}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_done_counts(self):
+        self.plan(5, 1, status="done")
+
+        self.assert_blocked(self.client.patch, 4, self.message(4, f"{self.day(1)}: 5h"))
+
+    def test_raising_with_overloaded_days_is_allowed(self):
+        self.user.max_daily_hours = Decimal("3")
+        self.user.save()
+        self.plan(7, 1)
+
+        for value in (3, 5):
+            response = self.client.patch(self.url, {"max_daily_hours": value}, format="json")
+            self.assertEqual(response.status_code, 200)
+
+    def test_other_organizer_subtasks_do_not_count(self):
+        other = User.objects.create(
+            name="Beto", email="beto@example.com", password_hash=make_password(PASSWORD)
+        )
+        self.plan(9, 1, event=self.make_event(other))
+
+        response = self.client.patch(self.url, {"max_daily_hours": 3}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_more_than_three_days_are_summarized(self):
+        for offset, hours in ((1, 7), (2, 5), (3, 8), (4, 5), (5, 6)):
+            self.plan(hours, offset)
+        listed = f"{self.day(1)}: 7h, {self.day(2)}: 5h, {self.day(3)}: 8h y 2 más"
+
+        self.assert_blocked(self.client.patch, 4, self.message(4, listed))
+        self.assert_blocked(self.client.put, 4, self.message(4, listed))
+
+    def test_same_value_with_overloaded_days_is_allowed(self):
+        self.plan(9, 1)
+
+        response = self.client.patch(self.url, {"max_daily_hours": 6}, format="json")
+
+        self.assertEqual(response.status_code, 200)

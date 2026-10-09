@@ -2,6 +2,7 @@ import time
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
+from django.db import transaction
 from django.db.models import F
 
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
@@ -283,23 +284,35 @@ class MeView(APIView):
     ),
     put=extend_schema(
         summary="Update user settings",
-        description="Updates the daily hours limit (1 to 16). Other fields are ignored.",
+        description=(
+            "Updates the daily hours limit (1 to 16). Other fields are ignored. "
+            "Lowering it is rejected if any day from today on has more planned hours "
+            "than the new limit."
+        ),
         tags=["User settings"],
         request=UserSettingsSerializer,
         responses={
             200: UserSettingsSerializer,
-            400: OpenApiResponse(description="Limit out of range or not a number"),
+            400: OpenApiResponse(
+                description="Limit out of range, not a number, or below the load of an upcoming day"
+            ),
             401: OpenApiResponse(description="Missing, invalid or revoked access token"),
         },
     ),
     patch=extend_schema(
         summary="Partially update user settings",
-        description="Updates the daily hours limit (1 to 16). Other fields are ignored.",
+        description=(
+            "Updates the daily hours limit (1 to 16). Other fields are ignored. "
+            "Lowering it is rejected if any day from today on has more planned hours "
+            "than the new limit."
+        ),
         tags=["User settings"],
         request=UserSettingsSerializer,
         responses={
             200: UserSettingsSerializer,
-            400: OpenApiResponse(description="Limit out of range or not a number"),
+            400: OpenApiResponse(
+                description="Limit out of range, not a number, or below the load of an upcoming day"
+            ),
             401: OpenApiResponse(description="Missing, invalid or revoked access token"),
         },
     ),
@@ -317,9 +330,12 @@ class UserSettingsView(APIView):
         return self._update(request, partial=True)
 
     def _update(self, request, partial):
-        serializer = UserSettingsSerializer(request.user, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
+        # Lock the row so the load check can't race with subtask creation.
+        with transaction.atomic():
+            user = User.objects.select_for_update().get(pk=request.user.pk)
+            serializer = UserSettingsSerializer(user, data=request.data, partial=partial)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
         return Response(serializer.data)
 
 

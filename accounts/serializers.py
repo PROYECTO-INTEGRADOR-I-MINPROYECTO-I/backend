@@ -1,10 +1,19 @@
 from django.contrib.auth import password_validation
 from django.contrib.auth.hashers import make_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
 from .models import User
+
+MAX_LISTED_OVERLOADED_DAYS = 3
+
+
+def _fmt_hours(value):
+    # 7 -> "7", 7.5 -> "7.5"
+    text = format(float(value), "f")
+    return text.rstrip("0").rstrip(".") if "." in text else text
 
 
 class LoginSerializer(serializers.Serializer):
@@ -46,6 +55,28 @@ class UserSettingsSerializer(serializers.ModelSerializer):
         model = User
         # Only this field: anything else in the body is ignored.
         fields = ['max_daily_hours']
+
+    def validate_max_daily_hours(self, value):
+        # Local import: planning depends on event, which depends on accounts.
+        from planning.services import days_over_limit
+
+        if self.instance is None or value >= self.instance.max_daily_hours:
+            return value
+
+        days = days_over_limit(self.instance, value, timezone.localdate())
+        if days:
+            listed = ", ".join(
+                f"{day:%d/%m/%Y}: {_fmt_hours(hours)}h"
+                for day, hours in days[:MAX_LISTED_OVERLOADED_DAYS]
+            )
+            extra = len(days) - MAX_LISTED_OVERLOADED_DAYS
+            if extra > 0:
+                listed += f" y {extra} más"
+            raise ValidationError(
+                f"No puedes bajar el límite a {_fmt_hours(value)}h: hay días con más horas "
+                f"planificadas ({listed}). Reprograma o reduce esas gestiones primero."
+            )
+        return value
 
     def update(self, instance, validated_data):
         # Save only this column so a concurrent logout's token_version isn't overwritten.
