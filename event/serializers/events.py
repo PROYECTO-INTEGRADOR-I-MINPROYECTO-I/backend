@@ -62,8 +62,13 @@ class EventSerializer(serializers.ModelSerializer):
         allow_blank=True,
         required=False,
         max_length=500,
-        error_messages={"max_length": "El valor de la portada no puede superar los 500 caracteres."},
+        error_messages={
+            "max_length": "El valor de la portada no puede superar los 500 caracteres."
+        },
     )
+    total_subtasks = serializers.IntegerField(read_only=True)
+    completed_subtasks = serializers.IntegerField(read_only=True)
+    progress_percentage = serializers.SerializerMethodField()
 
     class Meta:
         model = Event
@@ -78,10 +83,21 @@ class EventSerializer(serializers.ModelSerializer):
             "client_contact",
             "cover_kind",
             "cover_value",
+            "total_subtasks",
+            "completed_subtasks",
+            "progress_percentage",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["eid", "user", "created_at", "updated_at"]
+        read_only_fields = [
+            "eid",
+            "user",
+            "created_at",
+            "updated_at",
+            "total_subtasks",
+            "completed_subtasks",
+            "progress_percentage",
+        ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -95,6 +111,13 @@ class EventSerializer(serializers.ModelSerializer):
         if not value.strip():
             raise ValidationError("Escribe el nombre del evento.")
         return value
+
+    def get_progress_percentage(self, obj):
+        total = getattr(obj, "total_subtasks", 0)
+        completed = getattr(obj, "completed_subtasks", 0)
+        if total == 0:
+            return 0.0
+        return round((completed / total) * 100, 2)
 
     def validate(self, attrs):
         # En un PATCH parcial, attrs solo trae los campos que llegaron en el
@@ -111,11 +134,17 @@ class EventSerializer(serializers.ModelSerializer):
 
         if bool(kind) != bool(value):
             raise ValidationError(
-                {"cover_value": "cover_kind y cover_value deben ir juntos, o ninguno de los dos."}
+                {
+                    "cover_value": "cover_kind y cover_value deben ir juntos, o ninguno de los dos."
+                }
             )
 
         if kind == "color" and value and not HEX_COLOR_PATTERN.match(value):
-            raise ValidationError({"cover_value": "El color debe ser un hexadecimal válido, por ejemplo #8b1a1a."})
+            raise ValidationError(
+                {
+                    "cover_value": "El color debe ser un hexadecimal válido, por ejemplo #8b1a1a."
+                }
+            )
 
         # Normaliza "" a None y guarda el valor ya completado (para que un
         # PATCH que solo manda uno de los dos campos no deje el otro con un

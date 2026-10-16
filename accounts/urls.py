@@ -6,7 +6,7 @@ from .views import (
     MeView,
     RefreshView,
     RegisterView,
-    MaxHoursUpdateView,
+    UserSettingsView,
 )
 
 urlpatterns = [
@@ -15,9 +15,5 @@ urlpatterns = [
     path("auth/me/", MeView.as_view(), name="auth-me"),
     path("auth/refresh/", RefreshView.as_view(), name="auth-refresh"),
     path("auth/register/", RegisterView.as_view(), name="auth-register"),
-    path(
-        "users/<int:user_id>/max-hours/",
-        MaxHoursUpdateView.as_view(),
-        name="auth-max-hours-update",
-    ),
+    path("user/settings/", UserSettingsView.as_view(), name="user-settings"),
 ]

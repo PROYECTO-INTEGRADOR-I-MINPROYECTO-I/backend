@@ -1,10 +1,19 @@
 from django.contrib.auth import password_validation
 from django.contrib.auth.hashers import make_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
 from .models import User
+
+MAX_LISTED_OVERLOADED_DAYS = 3
+
+
+def _fmt_hours(value):
+    # 7 -> "7", 7.5 -> "7.5"
+    text = format(float(value), "f")
+    return text.rstrip("0").rstrip(".") if "." in text else text
 
 
 class LoginSerializer(serializers.Serializer):
@@ -17,7 +26,7 @@ class UserSerializer(serializers.ModelSerializer):
     name = serializers.CharField(
         required=True, allow_blank=False
     )  # No empty named user allowed
-    # Read-only for now: the daily limit becomes configurable with US-12.
+    # Read-only here: it is edited through UserSettingsSerializer.
     max_daily_hours = serializers.DecimalField(
         max_digits=4, decimal_places=2, read_only=True
     )
@@ -36,6 +45,59 @@ class UserMaxHoursSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["max_daily_hours"]
+
+
+class UserSettingsSerializer(serializers.ModelSerializer):
+    max_daily_hours = serializers.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        min_value=1,
+        max_value=16,
+        error_messages={
+            "required": "Escribe el límite diario de horas.",
+            "null": "Escribe el límite diario de horas.",
+            "invalid": "El límite debe ser un número válido.",
+            "min_value": "El límite debe estar entre 1 y 16 horas",
+            "max_value": "El límite debe estar entre 1 y 16 horas",
+            "max_digits": "El límite debe estar entre 1 y 16 horas",
+            "max_decimal_places": "El límite admite máximo 2 decimales.",
+            "max_whole_digits": "El límite debe estar entre 1 y 16 horas",
+        },
+    )
+
+    class Meta:
+        model = User
+        # Only this field: anything else in the body is ignored.
+        fields = ["max_daily_hours"]
+
+    def validate_max_daily_hours(self, value):
+        # Local import: planning depends on event, which depends on accounts.
+        from planning.services import days_over_limit
+
+        if self.instance is None or value >= self.instance.max_daily_hours:
+            return value
+
+        days = days_over_limit(self.instance, value, timezone.localdate())
+        if days:
+            listed = ", ".join(
+                f"{day:%d/%m/%Y}: {_fmt_hours(hours)}h"
+                for day, hours in days[:MAX_LISTED_OVERLOADED_DAYS]
+            )
+            extra = len(days) - MAX_LISTED_OVERLOADED_DAYS
+            if extra > 0:
+                listed += f" y {extra} más"
+            raise ValidationError(
+                f"No puedes bajar el límite a {_fmt_hours(value)}h: hay días con más horas "
+                f"planificadas ({listed}). Reprograma o reduce esas gestiones primero."
+            )
+        return value
+
+    def update(self, instance, validated_data):
+        # Save only this column so a concurrent logout's token_version isn't overwritten.
+        if "max_daily_hours" in validated_data:
+            instance.max_daily_hours = validated_data["max_daily_hours"]
+            instance.save(update_fields=["max_daily_hours"])
+        return instance
 
 
 class AuthTokenSerializer(serializers.Serializer):

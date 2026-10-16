@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
@@ -8,10 +9,15 @@ from drf_spectacular.utils import (
     extend_schema,
     extend_schema_view,
 )
+from rest_framework import status
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.response import Response
+
+from planning.services import evaluate_conflict
 
 from ..models import Event, Subtask
-from ..serializers import SubtaskSerializer
+from ..serializers import SubtaskCreateRequestSerializer, SubtaskSerializer
+from .conflicts import lock_organizer, overload_response, parse_confirm
 from .mixins import OrganizerMixin
 
 
@@ -36,6 +42,9 @@ Creates a new subtask associated with a specific event.
 
 * **Note:** the response includes a `warnings` list (e.g. when the
 subtask's target date falls after the event's due date).
+* **Overload:** if the day would exceed the organizer's daily hour limit
+the request answers `409` (`DAILY_OVERLOAD`, with alternatives) and nothing
+is saved. Send `"confirm": true` to create it anyway.
         """,
         parameters=[
             OpenApiParameter(
@@ -46,11 +55,12 @@ subtask's target date falls after the event's due date).
             )
         ],
         tags=["Subtasks"],
-        request=SubtaskSerializer,
+        request=SubtaskCreateRequestSerializer,
         responses={
             201: SubtaskSerializer,
             400: OpenApiResponse(description="Validation error (e.g. empty title or invalid hours)"),
             404: OpenApiResponse(description="Parent Event not found"),
+            409: OpenApiResponse(description="DAILY_OVERLOAD: the day would exceed the daily limit (retry with confirm=true)"),
         },
         examples=[
             OpenApiExample(
@@ -63,6 +73,7 @@ subtask's target date falls after the event's due date).
                     "estimated_hours": 3,
                     "scheduled_date": "2026-10-15",
                     "status": "pending",
+                    "confirm": False,
                 },
                 request_only=True,
             )
@@ -88,7 +99,26 @@ class EventSubtaskListCreateView(OrganizerMixin, ListCreateAPIView):
         serializer.save(eid=self.get_event(), executed_at=timezone.now() if done else None)
 
     def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+        confirm = parse_confirm(request.data)
+        with transaction.atomic():
+            if data.get("status", "pending") != "postponed" and not confirm:
+                organizer = self.get_organizer()
+                lock_organizer(organizer)
+                evaluation = evaluate_conflict(
+                    organizer, data["scheduled_date"], data["estimated_hours"]
+                )
+                if evaluation["has_conflict"]:
+                    return overload_response(evaluation)
+            self.perform_create(serializer)
+        response = Response(
+            serializer.data,
+            status=status.HTTP_201_CREATED,
+            headers=self.get_success_headers(serializer.data),
+        )
 
         warnings = []
         event = self.get_event()
