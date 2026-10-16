@@ -7,7 +7,6 @@ from .views import (
     EventSubtaskListCreateView,
     EventTypeListCreateView,
     SubtaskDetailView,
-    SubtaskReprogramView,
     health,
     test,
 )
@@ -28,11 +27,6 @@ urlpatterns = [
         "subtareas/<int:subtask_id>/",
         SubtaskDetailView.as_view(),
         name="subtask-detail",
-    ),
-    path(
-        "subtareas/<int:subtask_id>/reprogram/",
-        SubtaskReprogramView.as_view(),
-        name="subtask-reprogram",
     ),
     path("tipos-evento/", EventTypeListCreateView.as_view(), name="event-type-create"),
     path("categorias/", CategoryListCreateView.as_view(), name="category-create"),

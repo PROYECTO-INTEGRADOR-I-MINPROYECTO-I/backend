@@ -43,22 +43,13 @@ def group_subtasks(organizer, today, event_id=None, days_ahead=7, status=None):
         scheduled_date__gt=today, scheduled_date__lte=upcoming_limit, status="pending"
     ).order_by(*SUBTASK_ORDERING)
     postponed = base.none()
-    postponed_today = base.filter(scheduled_date=today, status="postponed").order_by(
-        *SUBTASK_ORDERING
-    )
-    # Not tied to the status filter: it's only a hint for the "other days" link.
-    postponed_other_days_count = base.filter(status="postponed").exclude(
-        scheduled_date=today
-    ).count()
 
     if status == "done":
         overdue = base.none()
         pending_today = base.none()
         upcoming = base.none()
-        postponed_today = base.none()
     elif status == "pending":
         done_today = base.none()
-        postponed_today = base.none()
     elif status == "postponed":
         # Postponed subtasks moved off their date, so they're empty above by default.
         overdue = base.none()
@@ -71,10 +62,9 @@ def group_subtasks(organizer, today, event_id=None, days_ahead=7, status=None):
 
     return {
         "overdue": overdue,
-        "today": {"pending": pending_today, "done": done_today, "postponed": postponed_today},
+        "today": {"pending": pending_today, "done": done_today},
         "upcoming": upcoming,
         "postponed": postponed,
-        "postponed_other_days_count": postponed_other_days_count,
     }
 
 
@@ -124,10 +114,6 @@ def _to_decimal(value):
     return value if isinstance(value, Decimal) else Decimal(str(value))
 
 
-def _daily_limit(organizer):
-    return _to_decimal(organizer.max_daily_hours)
-
-
 def _load_qs(organizer, exclude_subtask_id=None):
     qs = Subtask.objects.for_organizer(organizer).filter(status__in=_LOAD_STATUSES)
     if exclude_subtask_id is not None:
@@ -156,22 +142,9 @@ def days_over_limit(organizer, limit, since):
     return [(row["scheduled_date"], row["total"]) for row in rows]
 
 
-def evaluate_day(organizer, day):
-    """Load of a day against the limit, without suggestions (for summaries)."""
-    limit = _daily_limit(organizer)
-    load = daily_load(organizer, day)
-    return {
-        "has_conflict": load > limit,
-        "date": day,
-        "projected": load,
-        "limit": limit,
-        "excess": max(load - limit, Decimal("0")),
-    }
-
-
 def evaluate_conflict(organizer, day, hours, exclude_subtask_id=None):
     """Checks whether adding `hours` to `day` goes over the organizer's daily limit."""
-    limit = _daily_limit(organizer)
+    limit = _to_decimal(organizer.max_daily_hours)
     hours = _to_decimal(hours)
     load = daily_load(organizer, day, exclude_subtask_id)
     projected = load + hours

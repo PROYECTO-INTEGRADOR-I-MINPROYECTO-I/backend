@@ -1,5 +1,3 @@
-from decimal import Decimal
-
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -12,24 +10,15 @@ from drf_spectacular.utils import (
     extend_schema_view,
 )
 from rest_framework import status
-from rest_framework.generics import GenericAPIView, ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.response import Response
 
-from planning.services import evaluate_conflict, evaluate_day
+from planning.services import evaluate_conflict
 
 from ..models import Event, Subtask
-from ..serializers import (
-    SubtaskCreateRequestSerializer,
-    SubtaskReprogramSerializer,
-    SubtaskSerializer,
-    SubtaskWithConflictSerializer,
-)
-from .conflicts import conflict_summary, lock_organizer, overload_response, parse_confirm
+from ..serializers import SubtaskCreateRequestSerializer, SubtaskSerializer
+from .conflicts import lock_organizer, overload_response, parse_confirm
 from .mixins import OrganizerMixin
-
-
-# PATCH fields that change a day's load.
-_LOAD_FIELDS = {"estimated_hours", "scheduled_date", "status"}
 
 
 @extend_schema_view(
@@ -156,14 +145,10 @@ class EventSubtaskListCreateView(OrganizerMixin, ListCreateAPIView):
 
         Setting `status` to `"done"` stamps `executed_at` with the current
         time; moving it away from `"done"` clears `executed_at`.
-
-        When `estimated_hours`, `scheduled_date` or `status` are sent, the
-        response also includes a `conflicto` summary of the subtask's day
-        (`hay_conflicto` may stay true after the change; it never blocks).
         """,
         tags=["Subtasks"],
         responses={
-            200: SubtaskWithConflictSerializer,
+            200: SubtaskSerializer,
             400: OpenApiResponse(description="Validation error (e.g. empty title or invalid hours)"),
             404: OpenApiResponse(description="Subtask not found for the current organizer"),
         },
@@ -184,16 +169,6 @@ class SubtaskDetailView(OrganizerMixin, RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         return Subtask.objects.for_organizer(self.get_organizer())
 
-    def update(self, request, *args, **kwargs):
-        with transaction.atomic():
-            response = super().update(request, *args, **kwargs)
-            # The change is saved either way; the summary tells the client if the day is still over.
-            if hasattr(request.data, "keys") and _LOAD_FIELDS.intersection(request.data):
-                subtask = self.get_object()
-                evaluation = evaluate_day(self.get_organizer(), subtask.scheduled_date)
-                response.data["conflicto"] = conflict_summary(evaluation)
-        return response
-
     def perform_update(self, serializer):
         previous_status = serializer.instance.status
         instance = serializer.save()
@@ -201,65 +176,3 @@ class SubtaskDetailView(OrganizerMixin, RetrieveUpdateDestroyAPIView):
         if instance.status != previous_status and "done" in (instance.status, previous_status):
             instance.executed_at = timezone.now() if instance.status == "done" else None
             instance.save(update_fields=["executed_at"])
-
-
-@extend_schema_view(
-    patch=extend_schema(
-        summary="Reprogram a subtask to another date",
-        description="""
-Moves the subtask to `scheduled_date` (past dates allowed) without changing its status.
-
-If the target day would exceed the organizer's daily hour limit the request
-answers `409` (`DAILY_OVERLOAD`, with alternatives) and nothing is saved.
-Send `"confirm": true` to move it anyway. The 200 response includes a
-`conflicto` summary for the new day.
-        """,
-        tags=["Subtasks"],
-        request=SubtaskReprogramSerializer,
-        responses={
-            200: SubtaskWithConflictSerializer,
-            400: OpenApiResponse(description="Missing or invalid target date"),
-            404: OpenApiResponse(description="Subtask not found for the current organizer"),
-            409: OpenApiResponse(description="DAILY_OVERLOAD: the target day would exceed the daily limit"),
-        },
-        examples=[
-            OpenApiExample(
-                "Reprogram payload",
-                value={"scheduled_date": "2026-10-06", "confirm": False},
-                request_only=True,
-            )
-        ],
-    )
-)
-class SubtaskReprogramView(OrganizerMixin, GenericAPIView):
-    serializer_class = SubtaskReprogramSerializer
-    http_method_names = ["patch", "options"]
-
-    def get_queryset(self):
-        return Subtask.objects.for_organizer(self.get_organizer()).select_related("category")
-
-    def patch(self, request, subtask_id):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        new_date = serializer.validated_data["scheduled_date"]
-        confirm = serializer.validated_data["confirm"]
-
-        organizer = self.get_organizer()
-        with transaction.atomic():
-            lock_organizer(organizer)
-            queryset = self.get_queryset().select_for_update(of=("self",))
-            subtask = get_object_or_404(queryset, pk=subtask_id)
-            # Postponed subtasks don't use capacity: evaluate the day's load alone.
-            hours = Decimal("0") if subtask.status == "postponed" else subtask.estimated_hours
-            evaluation = evaluate_conflict(
-                organizer, new_date, hours, exclude_subtask_id=subtask.pk
-            )
-            if evaluation["has_conflict"] and not confirm:
-                return overload_response(evaluation)
-
-            subtask.scheduled_date = new_date
-            subtask.save(update_fields=["scheduled_date"])
-
-        data = SubtaskSerializer(subtask, context=self.get_serializer_context()).data
-        data["conflicto"] = conflict_summary(evaluation)
-        return Response(data)
