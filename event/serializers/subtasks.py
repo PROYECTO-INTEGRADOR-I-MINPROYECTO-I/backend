@@ -93,3 +93,33 @@ class SubtaskCreateRequestSerializer(SubtaskSerializer):
 
     class Meta(SubtaskSerializer.Meta):
         fields = SubtaskSerializer.Meta.fields + ["confirm"]
+
+
+class SubtaskReprogramSerializer(serializers.Serializer):
+    scheduled_date = serializers.DateField(
+        error_messages={
+            "required": "La fecha objetivo no es válida.",
+            "null": "La fecha objetivo no es válida.",
+            "invalid": "La fecha objetivo no es válida.",
+        },
+    )
+    confirm = serializers.BooleanField(required=False, default=False)
+
+
+class ConflictSummarySerializer(serializers.Serializer):
+    """Doc-only: shape of the `conflicto` summary."""
+
+    hay_conflicto = serializers.BooleanField()
+    fecha = serializers.DateField()
+    horas_planificadas = serializers.FloatField()
+    limite = serializers.FloatField()
+    exceso = serializers.FloatField()
+
+
+class SubtaskWithConflictSerializer(SubtaskSerializer):
+    """Doc-only: subtask plus the `conflicto` summary of its day."""
+
+    conflicto = ConflictSummarySerializer(read_only=True)
+
+    class Meta(SubtaskSerializer.Meta):
+        fields = SubtaskSerializer.Meta.fields + ["conflicto"]
