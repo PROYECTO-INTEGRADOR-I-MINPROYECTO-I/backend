@@ -214,6 +214,18 @@ class UserSettingsTests(APITestCase):
         _refresh, access = issue_tokens(user)
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
 
+    def test_me_patch_is_not_allowed(self):
+        user = self.make_user()
+        self.auth(user)
+
+        response = self.client.patch(
+            "/api/auth/me/", {"max_daily_hours": 50}, format="json"
+        )
+
+        self.assertEqual(response.status_code, 405)
+        user.refresh_from_db()
+        self.assertEqual(user.max_daily_hours, Decimal("6.00"))
+
     def test_new_user_defaults_to_six_hours(self):
         user = self.make_user()
         self.auth(user)
