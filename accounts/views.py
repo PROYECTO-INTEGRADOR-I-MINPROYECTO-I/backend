@@ -263,7 +263,10 @@ class RefreshView(APIView):
     summary="Current user",
     description="Returns the authenticated user (Bearer access token).",
     tags=["Auth"],
-    responses={200: UserSerializer, 401: OpenApiResponse(description="Missing, invalid or revoked access token")},
+    responses={
+        200: UserSerializer,
+        401: OpenApiResponse(description="Missing, invalid or revoked access token"),
+    },
 )
 class MeView(APIView):
     # Uses the default authentication and permission (Bearer JWT + IsOrganizer).
@@ -279,7 +282,9 @@ class MeView(APIView):
         tags=["User settings"],
         responses={
             200: UserSettingsSerializer,
-            401: OpenApiResponse(description="Missing, invalid or revoked access token"),
+            401: OpenApiResponse(
+                description="Missing, invalid or revoked access token"
+            ),
         },
     ),
     put=extend_schema(
@@ -296,7 +301,9 @@ class MeView(APIView):
             400: OpenApiResponse(
                 description="Limit out of range, not a number, or below the load of an upcoming day"
             ),
-            401: OpenApiResponse(description="Missing, invalid or revoked access token"),
+            401: OpenApiResponse(
+                description="Missing, invalid or revoked access token"
+            ),
         },
     ),
     patch=extend_schema(
@@ -313,7 +320,9 @@ class MeView(APIView):
             400: OpenApiResponse(
                 description="Limit out of range, not a number, or below the load of an upcoming day"
             ),
-            401: OpenApiResponse(description="Missing, invalid or revoked access token"),
+            401: OpenApiResponse(
+                description="Missing, invalid or revoked access token"
+            ),
         },
     ),
 )
@@ -333,7 +342,9 @@ class UserSettingsView(APIView):
         # Lock the row so the load check can't race with subtask creation.
         with transaction.atomic():
             user = User.objects.select_for_update().get(pk=request.user.pk)
-            serializer = UserSettingsSerializer(user, data=request.data, partial=partial)
+            serializer = UserSettingsSerializer(
+                user, data=request.data, partial=partial
+            )
             serializer.is_valid(raise_exception=True)
             serializer.save()
         return Response(serializer.data)

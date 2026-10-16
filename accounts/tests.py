@@ -17,6 +17,10 @@ from .tokens import issue_tokens
 PASSWORD = "clave-segura-123"
 FRONT_ORIGIN = "http://localhost:5173"
 
+"""
+Test login correct implementation, fail safe and message errors with incomplete credentials on request.
+"""
+
 
 @override_settings(CORS_ALLOWED_ORIGINS=[FRONT_ORIGIN])
 class JWTAuthTests(APITestCase):
@@ -121,7 +125,9 @@ class JWTAuthTests(APITestCase):
         self.assertEqual(self.client.post("/api/auth/refresh/").status_code, 401)
 
     def test_other_organizer_gets_404_on_my_event(self):
-        event = Event.objects.create(user=self.user, name="Boda", due_date="2099-01-01T18:00:00Z")
+        event = Event.objects.create(
+            user=self.user, name="Boda", due_date="2099-01-01T18:00:00Z"
+        )
         intruder = User.objects.create(
             name="Beto", email="beto@example.com", password_hash=make_password(PASSWORD)
         )
@@ -130,8 +136,11 @@ class JWTAuthTests(APITestCase):
 
         url = f"/api/eventos/{event.pk}/"
         self.assertEqual(self.client.get(url).status_code, 404)
-        self.assertEqual(self.client.patch(url, {"name": "x"}, format="json").status_code, 404)
+        self.assertEqual(
+            self.client.patch(url, {"name": "x"}, format="json").status_code, 404
+        )
         self.assertEqual(self.client.delete(url).status_code, 404)
+
 
 class TestRegister(APITestCase):
     def setUp(self):
@@ -205,6 +214,18 @@ class UserSettingsTests(APITestCase):
         _refresh, access = issue_tokens(user)
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
 
+    def test_me_patch_is_not_allowed(self):
+        user = self.make_user()
+        self.auth(user)
+
+        response = self.client.patch(
+            "/api/auth/me/", {"max_daily_hours": 50}, format="json"
+        )
+
+        self.assertEqual(response.status_code, 405)
+        user.refresh_from_db()
+        self.assertEqual(user.max_daily_hours, Decimal("6.00"))
+
     def test_new_user_defaults_to_six_hours(self):
         user = self.make_user()
         self.auth(user)
@@ -238,7 +259,8 @@ class UserSettingsTests(APITestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(
-            response.json()["error"]["details"]["max_daily_hours"], ["El límite debe ser un número válido."]
+            response.json()["error"]["details"]["max_daily_hours"],
+            ["El límite debe ser un número válido."],
         )
 
     def test_boundary_values_are_accepted_and_persisted(self):
@@ -246,7 +268,9 @@ class UserSettingsTests(APITestCase):
         self.auth(user)
 
         for value, expected in ((1, "1.00"), (16, "16.00")):
-            response = self.client.put(self.url, {"max_daily_hours": value}, format="json")
+            response = self.client.put(
+                self.url, {"max_daily_hours": value}, format="json"
+            )
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json(), {"max_daily_hours": expected})
             user.refresh_from_db()
@@ -272,7 +296,12 @@ class UserSettingsTests(APITestCase):
 
         response = self.client.patch(
             self.url,
-            {"max_daily_hours": 8, "email": "hack@example.com", "name": "Otro", "token_version": 99},
+            {
+                "max_daily_hours": 8,
+                "email": "hack@example.com",
+                "name": "Otro",
+                "token_version": 99,
+            },
             format="json",
         )
 
@@ -296,10 +325,16 @@ class UserSettingsTests(APITestCase):
     def test_requires_authentication(self):
         self.assertEqual(self.client.get(self.url).status_code, 401)
         self.assertEqual(
-            self.client.put(self.url, {"max_daily_hours": 8}, format="json").status_code, 401
+            self.client.put(
+                self.url, {"max_daily_hours": 8}, format="json"
+            ).status_code,
+            401,
         )
         self.assertEqual(
-            self.client.patch(self.url, {"max_daily_hours": 8}, format="json").status_code, 401
+            self.client.patch(
+                self.url, {"max_daily_hours": 8}, format="json"
+            ).status_code,
+            401,
         )
 
 
@@ -343,7 +378,9 @@ class UserSettingsLowerLimitTests(APITestCase):
     def assert_blocked(self, method, limit, expected):
         response = method(self.url, {"max_daily_hours": limit}, format="json")
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["error"]["details"]["max_daily_hours"], [expected])
+        self.assertEqual(
+            response.json()["error"]["details"]["max_daily_hours"], [expected]
+        )
         self.user.refresh_from_db()
         self.assertEqual(self.user.max_daily_hours, Decimal("6"))
 
@@ -360,7 +397,9 @@ class UserSettingsLowerLimitTests(APITestCase):
         self.plan(3.5, 1)
         self.plan(3, 1)
 
-        self.assert_blocked(self.client.patch, 5, self.message(5, f"{self.day(1)}: 6.5h"))
+        self.assert_blocked(
+            self.client.patch, 5, self.message(5, f"{self.day(1)}: 6.5h")
+        )
 
     def test_lowering_to_exact_load_is_allowed(self):
         self.plan(4, 1)
@@ -404,7 +443,9 @@ class UserSettingsLowerLimitTests(APITestCase):
         self.plan(7, 1)
 
         for value in (3, 5):
-            response = self.client.patch(self.url, {"max_daily_hours": value}, format="json")
+            response = self.client.patch(
+                self.url, {"max_daily_hours": value}, format="json"
+            )
             self.assertEqual(response.status_code, 200)
 
     def test_other_organizer_subtasks_do_not_count(self):
