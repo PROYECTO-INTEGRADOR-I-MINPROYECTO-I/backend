@@ -24,7 +24,9 @@ from .services import day_progress, group_subtasks
 Groups the organizer's subtasks for today: overdue (pending with a past
 date), today's (pending and done, kept separate) and upcoming ones within
 `dias_proximos` days. `completadas` also includes anything marked done today,
-whatever its date. `progreso_dia` only counts subtasks scheduled for today.
+whatever its date. `para_hoy.pospuestas` lists today's postponed ones and
+`pospuestas_otros_dias` counts postponed ones on any other date (ignores `status`).
+`progreso_dia` only counts subtasks scheduled for today.
 Can be filtered by `event_id` and/or `status`.
     """,
     tags=["Today"],
@@ -76,8 +78,9 @@ Can be filtered by `event_id` and/or `status`.
                 "fecha": "2026-09-27",
                 "metrica": "gestiones",
                 "vencidas": [],
-                "para_hoy": {"pendientes": [], "completadas": []},
+                "para_hoy": {"pendientes": [], "completadas": [], "pospuestas": []},
                 "proximas": [],
+                "pospuestas_otros_dias": 0,
                 "progreso_dia": {
                     "completadas": 1,
                     "total": 3,
@@ -158,8 +161,12 @@ class TodayView(OrganizerMixin, APIView):
                 "completadas": TodaySubtaskSerializer(
                     groups["today"]["done"], many=True, context=context
                 ).data,
+                "pospuestas": TodaySubtaskSerializer(
+                    groups["today"]["postponed"], many=True, context=context
+                ).data,
             },
             "proximas": TodaySubtaskSerializer(groups["upcoming"], many=True, context=context).data,
+            "pospuestas_otros_dias": groups["postponed_other_days_count"],
             "progreso_dia": DayProgressSerializer(progress).data,
             "filtros": {"event_id": event_id, "status": status_filter},
         }
