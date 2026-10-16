@@ -43,13 +43,22 @@ def group_subtasks(organizer, today, event_id=None, days_ahead=7, status=None):
         scheduled_date__gt=today, scheduled_date__lte=upcoming_limit, status="pending"
     ).order_by(*SUBTASK_ORDERING)
     postponed = base.none()
+    postponed_today = base.filter(scheduled_date=today, status="postponed").order_by(
+        *SUBTASK_ORDERING
+    )
+    # Not tied to the status filter: it's only a hint for the "other days" link.
+    postponed_other_days_count = base.filter(status="postponed").exclude(
+        scheduled_date=today
+    ).count()
 
     if status == "done":
         overdue = base.none()
         pending_today = base.none()
         upcoming = base.none()
+        postponed_today = base.none()
     elif status == "pending":
         done_today = base.none()
+        postponed_today = base.none()
     elif status == "postponed":
         # Postponed subtasks moved off their date, so they're empty above by default.
         overdue = base.none()
@@ -62,9 +71,10 @@ def group_subtasks(organizer, today, event_id=None, days_ahead=7, status=None):
 
     return {
         "overdue": overdue,
-        "today": {"pending": pending_today, "done": done_today},
+        "today": {"pending": pending_today, "done": done_today, "postponed": postponed_today},
         "upcoming": upcoming,
         "postponed": postponed,
+        "postponed_other_days_count": postponed_other_days_count,
     }
 
 
