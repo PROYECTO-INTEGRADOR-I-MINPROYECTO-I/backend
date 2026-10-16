@@ -37,16 +37,6 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ["user_id", "name", "email", "max_daily_hours"]
 
 
-class UserMaxHoursSerializer(serializers.ModelSerializer):
-    max_daily_hours = serializers.DecimalField(
-        max_digits=4, decimal_places=2, required=True
-    )
-
-    class Meta:
-        model = User
-        fields = ["max_daily_hours"]
-
-
 class UserSettingsSerializer(serializers.ModelSerializer):
     max_daily_hours = serializers.DecimalField(
         max_digits=4,
