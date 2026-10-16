@@ -114,6 +114,10 @@ def _to_decimal(value):
     return value if isinstance(value, Decimal) else Decimal(str(value))
 
 
+def _daily_limit(organizer):
+    return _to_decimal(organizer.max_daily_hours)
+
+
 def _load_qs(organizer, exclude_subtask_id=None):
     qs = Subtask.objects.for_organizer(organizer).filter(status__in=_LOAD_STATUSES)
     if exclude_subtask_id is not None:
@@ -142,9 +146,22 @@ def days_over_limit(organizer, limit, since):
     return [(row["scheduled_date"], row["total"]) for row in rows]
 
 
+def evaluate_day(organizer, day):
+    """Load of a day against the limit, without suggestions (for summaries)."""
+    limit = _daily_limit(organizer)
+    load = daily_load(organizer, day)
+    return {
+        "has_conflict": load > limit,
+        "date": day,
+        "projected": load,
+        "limit": limit,
+        "excess": max(load - limit, Decimal("0")),
+    }
+
+
 def evaluate_conflict(organizer, day, hours, exclude_subtask_id=None):
     """Checks whether adding `hours` to `day` goes over the organizer's daily limit."""
-    limit = _to_decimal(organizer.max_daily_hours)
+    limit = _daily_limit(organizer)
     hours = _to_decimal(hours)
     load = daily_load(organizer, day, exclude_subtask_id)
     projected = load + hours
