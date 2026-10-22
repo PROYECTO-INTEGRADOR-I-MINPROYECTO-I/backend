@@ -23,7 +23,7 @@ from .services import day_progress, group_subtasks
     description="""
 Groups the organizer's subtasks for today: overdue (pending with a past
 date), today's (pending and done, kept separate) and upcoming ones within
-`dias_proximos` days. `completadas` also includes anything marked done today,
+`dias_proximos` days (0 = no limit). `completadas` also includes anything marked done today,
 whatever its date. `para_hoy.pospuestas` lists today's postponed ones and
 `pospuestas_otros_dias` counts postponed ones on any other date (ignores `status`).
 `progreso_dia` only counts subtasks scheduled for today.
@@ -36,7 +36,7 @@ Can be filtered by `event_id` and/or `status`.
             type=int,
             location=OpenApiParameter.QUERY,
             required=False,
-            description="Look-ahead window for 'proximas' (1 to 60, default 7).",
+            description="Look-ahead window for 'proximas' (0 to 60, default 7; 0 means no limit).",
         ),
         OpenApiParameter(
             name="metrica",
@@ -103,9 +103,9 @@ class TodayView(OrganizerMixin, APIView):
         try:
             value = int(raw)
         except (TypeError, ValueError):
-            raise ValidationError("dias_proximos debe ser un entero entre 1 y 60.")
-        if not 1 <= value <= 60:
-            raise ValidationError("dias_proximos debe ser un entero entre 1 y 60.")
+            raise ValidationError("dias_proximos debe ser un entero entre 0 y 60.")
+        if not 0 <= value <= 60:
+            raise ValidationError("dias_proximos debe ser un entero entre 0 y 60.")
         return value
 
     def _metrica(self, request):
