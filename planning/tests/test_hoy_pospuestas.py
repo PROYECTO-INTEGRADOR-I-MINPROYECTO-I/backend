@@ -81,3 +81,9 @@ class TodayPostponedTests(APITestCase):
             data = self.get_today(status=status)
             self.assertEqual(data["para_hoy"]["pospuestas"], [])
             self.assertEqual(data["pospuestas_otros_dias"], 1)
+
+    def test_dias_proximos_zero_means_no_limit(self):
+        sub = self.make_subtask(self.today + timedelta(days=30), status="pending")
+        self.assertEqual(self.get_today()["proximas"], [])
+        data = self.get_today(dias_proximos=0)
+        self.assertEqual([s["subtask_id"] for s in data["proximas"]], [sub.pk])
