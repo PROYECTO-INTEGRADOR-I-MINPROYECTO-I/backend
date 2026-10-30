@@ -5,6 +5,7 @@ from .views import (
     EventDetailView,
     EventListCreateView,
     EventSubtaskListCreateView,
+    EventTypeDetailView,
     EventTypeListCreateView,
     SubtaskDetailView,
     SubtaskReprogramView,
@@ -35,5 +36,6 @@ urlpatterns = [
         name="subtask-reprogram",
     ),
     path("tipos-evento/", EventTypeListCreateView.as_view(), name="event-type-create"),
+    path("tipos-evento/<int:event_type_id>/", EventTypeDetailView.as_view(), name="event-type-detail"),
     path("categorias/", CategoryListCreateView.as_view(), name="category-create"),
 ]

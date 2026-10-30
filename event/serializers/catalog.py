@@ -14,10 +14,15 @@ class EventTypeSerializer(serializers.ModelSerializer):
         max_length=100,
         error_messages={"max_length": "El nombre no puede superar los 100 caracteres."},
     )
+    # Solo los personalizados se pueden borrar.
+    custom = serializers.SerializerMethodField()
 
     class Meta:
         model = EventType
-        fields = ["id", "name"]
+        fields = ["id", "name", "custom"]
+
+    def get_custom(self, obj):
+        return obj.user_id is not None
 
     def validate_name(self, value):
         value = value.strip()

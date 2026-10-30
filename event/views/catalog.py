@@ -2,7 +2,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from rest_framework.generics import ListCreateAPIView
+from rest_framework.generics import DestroyAPIView, ListCreateAPIView
 
 from ..exceptions import Conflict
 from ..models import Category, EventType
@@ -38,6 +38,20 @@ class EventTypeListCreateView(OrganizerMixin, ListCreateAPIView):
                 serializer.save(user=self.get_organizer())
         except IntegrityError:
             raise Conflict("Ya tienes un tipo de evento con ese nombre")
+
+
+@extend_schema_view(
+    delete=extend_schema(
+        summary="Delete an event type",
+        description="Deletes one of the organizer's own event types. Predefined types return 404. Events using it keep no type.",
+        tags=["Tipos de evento"],
+    ),
+)
+class EventTypeDetailView(OrganizerMixin, DestroyAPIView):
+    lookup_field = "event_type_id"
+
+    def get_queryset(self):
+        return EventType.objects.filter(user=self.get_organizer())
 
 
 @extend_schema_view(

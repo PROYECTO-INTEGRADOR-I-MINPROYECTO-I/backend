@@ -1,4 +1,4 @@
-from .catalog import CategoryListCreateView, EventTypeListCreateView
+from .catalog import CategoryListCreateView, EventTypeDetailView, EventTypeListCreateView
 from .events import EventDetailView, EventListCreateView
 from .health import health, test
 from .mixins import OrganizerMixin
@@ -14,5 +14,6 @@ __all__ = [
     "SubtaskDetailView",
     "SubtaskReprogramView",
     "EventTypeListCreateView",
+    "EventTypeDetailView",
     "CategoryListCreateView",
 ]
