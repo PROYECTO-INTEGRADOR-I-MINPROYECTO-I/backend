@@ -1,5 +1,5 @@
 """Pure functions for daily load/progress, shared across views."""
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.db.models import Count, Q, Sum
@@ -31,7 +31,8 @@ def group_subtasks(organizer, today, event_id=None, days_ahead=7, status=None):
     if event_id is not None:
         base = base.filter(eid_id=event_id)
 
-    upcoming_limit = today + timedelta(days=days_ahead)
+    # days_ahead=0 means no limit.
+    upcoming_limit = today + timedelta(days=days_ahead) if days_ahead else date.max
 
     overdue = base.filter(scheduled_date__lt=today, status="pending").order_by(*SUBTASK_ORDERING)
     pending_today = base.filter(scheduled_date=today, status="pending").order_by(*SUBTASK_ORDERING)
